@@ -10,6 +10,7 @@
   <packaging>pom</packaging>
   <modules>
     <module>quartz-utility-starter</module>
+    <module>quartz-utility-autoconfigure</module>
   </modules>
 
   <properties>

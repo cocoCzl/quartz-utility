@@ -17,4 +17,14 @@
     <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
   </properties>
 
+  <dependencies>
+
+    <dependency>
+      <!-- Spring Boot Starter -->
+      <groupId>com.coco</groupId>
+      <artifactId>quartz-utility-autoconfigure</artifactId>
+      <version>1.0-SNAPSHOT</version>
+    </dependency>
+
+  </dependencies>
 </project>
