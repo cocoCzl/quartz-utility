@@ -1,12 +1,17 @@
 package com.coco.core;
 
+import com.coco.enums.TimeEnum;
+
 public class QuartzComponent {
 
     // 任务标识设置
     private final String description;
     // 任务恢复设置
     private final boolean shouldRecover;
-    private final int minuteInterval;
+    // 时间间隔
+    private final int timeInterval;
+    // 间隔时间单位
+    private final TimeEnum timeEnum;
     // 任务持久化设置
     private final boolean durability;
 
@@ -18,8 +23,12 @@ public class QuartzComponent {
         return shouldRecover;
     }
 
-    public int getMinuteInterval() {
-        return minuteInterval;
+    public int getTimeInterval() {
+        return timeInterval;
+    }
+
+    public TimeEnum getTimeEnum() {
+        return timeEnum;
     }
 
     public boolean isDurability() {
@@ -27,7 +36,8 @@ public class QuartzComponent {
     }
 
     private QuartzComponent(Builder builder) {
-        this.minuteInterval = builder.minuteInterval;
+        this.timeInterval = builder.timeInterval;
+        this.timeEnum = builder.timeEnum;
         this.description = builder.description;
         this.shouldRecover = builder.shouldRecover;
         this.durability = builder.durability;
@@ -35,13 +45,19 @@ public class QuartzComponent {
 
     public static class Builder {
 
-        private int minuteInterval = 5;
+        private int timeInterval = 5;
+        private TimeEnum timeEnum = TimeEnum.HOURS;
         private String description = "Default description";
         private boolean shouldRecover = false;
         private boolean durability = true;
 
-        public Builder setMinuteInterval(int minuteInterval) {
-            this.minuteInterval = minuteInterval;
+        public Builder setTimeInterval(int timeInterval) {
+            this.timeInterval = timeInterval;
+            return this;
+        }
+
+        public Builder setTimeEnum(TimeEnum timeEnum) {
+            this.timeEnum = timeEnum;
             return this;
         }
 

@@ -1,4 +1,4 @@
-package com.coco.core;
+package com.coco.enums;
 
 
 public enum LogTaskExecStateEnum {
