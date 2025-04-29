@@ -12,11 +12,11 @@ import org.quartz.SimpleTrigger;
 import org.quartz.Trigger;
 import org.quartz.TriggerKey;
 
-public class QuartzScheduler {
+public class CoQuartzScheduler {
 
     private final Scheduler scheduler;
 
-    public QuartzScheduler(Scheduler scheduler) {
+    public CoQuartzScheduler(Scheduler scheduler) {
         this.scheduler = scheduler;
     }
 
@@ -115,5 +115,29 @@ public class QuartzScheduler {
                     QuartzUtilityException.PARAMETER_ABNORMAL);
         }
         return newInterval;
+    }
+
+    public TriggerKey getTriggerKey(String taskName) {
+        return SchedulerCore.getTriggerKey(taskName);
+    }
+
+    public TriggerKey getTriggerKey(String name, String group) {
+        return SchedulerCore.getTriggerKey(name, group);
+    }
+
+    public TriggerKey getDefaultTriggerKey() {
+        return SchedulerCore.getDefaultTriggerKey();
+    }
+
+    public JobKey getJobKey(String taskName) {
+        return SchedulerCore.getJobKey(taskName);
+    }
+
+    public JobKey getJobKey(String name, String group) {
+        return SchedulerCore.getJobKey(name, group);
+    }
+
+    public JobKey getDefaultJobKey() {
+        return SchedulerCore.getDefaultJobKey();
     }
 }

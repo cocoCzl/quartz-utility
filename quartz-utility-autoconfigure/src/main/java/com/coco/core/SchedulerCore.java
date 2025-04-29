@@ -162,5 +162,4 @@ public class SchedulerCore {
         return JobKey.jobKey(QuartzSign.JOB_KEY_PREFIX, QuartzSign.GROUP);
     }
 
-
 }

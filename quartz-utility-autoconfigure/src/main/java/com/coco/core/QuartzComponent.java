@@ -46,7 +46,7 @@ public class QuartzComponent {
     public static class Builder {
 
         private int timeInterval = 5;
-        private TimeEnum timeEnum = TimeEnum.HOURS;
+        private TimeEnum timeEnum = TimeEnum.MINUTES;
         private String description = "Default description";
         private boolean shouldRecover = false;
         private boolean durability = true;
