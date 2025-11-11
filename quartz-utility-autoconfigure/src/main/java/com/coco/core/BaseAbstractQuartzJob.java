@@ -1,21 +1,14 @@
 package com.coco.core;
 
 import com.coco.enums.LogTaskExecStateEnum;
-import java.sql.SQLException;
 import java.sql.Timestamp;
 import java.util.Optional;
-import java.util.logging.Level;
-import java.util.logging.Logger;
 import org.quartz.Job;
 import org.quartz.JobExecutionContext;
 import org.quartz.JobExecutionException;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.jdbc.core.JdbcTemplate;
-import org.springframework.transaction.PlatformTransactionManager;
-import org.springframework.transaction.TransactionDefinition;
-import org.springframework.transaction.TransactionStatus;
-import org.springframework.transaction.support.DefaultTransactionDefinition;
 
 public abstract class BaseAbstractQuartzJob implements Job {
 
@@ -23,61 +16,38 @@ public abstract class BaseAbstractQuartzJob implements Job {
     @Qualifier("quartzJdbcTemplate")
     private JdbcTemplate quartzJdbcTemplate;
 
-    @Autowired
-    private PlatformTransactionManager transactionManager;
-
-    // 初始化 Java 标准库的日志记录器
-    private static final Logger logger = Logger.getLogger(BaseAbstractQuartzJob.class.getName());
-
     /**
      * 抽象方法，子类需要实现具体的任务执行逻辑
      *
      * @param context 任务执行上下文
      * @throws Throwable 可能抛出的异常
      */
-    protected abstract void executeQuartzTask(JobExecutionContext context) throws Throwable;
+    protected abstract void executeQuartz(JobExecutionContext context) throws Throwable;
 
     @Override
     public void execute(JobExecutionContext context) throws JobExecutionException {
-
-        TransactionDefinition def = new DefaultTransactionDefinition();
-        TransactionStatus status = transactionManager.getTransaction(def);
 
         byte execState = LogTaskExecStateEnum.EXEC_SUCCESS.getCode();
         String errorMessage = null;
         try {
             // 调用抽象方法执行具体任务
-            executeQuartzTask(context);
+            executeQuartz(context);
         } catch (Throwable e) {
             execState = LogTaskExecStateEnum.EXEC_FAIL.getCode();
             errorMessage = e.getMessage();
+            // 将捕获的异常封装为JobExecutionException抛出
             throw new JobExecutionException(e);
         } finally {
             // 记录日志
-            try {
-                String jobKey = context.getJobDetail().getKey().toString();
-                String triggerKey = context.getTrigger().getKey().toString();
+            String jobKey = context.getJobDetail().getKey().toString();
+            String triggerKey = context.getTrigger().getKey().toString();
 
-                Optional<Integer> optional = checkExists(jobKey, triggerKey);
-                if (optional.isPresent()) {
-                    // 更新LOG数据
-                    int update = updateTaskLog(execState, errorMessage, optional.get());
-                    if (update != 1) {
-                        throw new SQLException("update log error.");
-                    }
-                } else {
-                    // 插入LOG数据
-                    int insert = insertTaskLog(jobKey, triggerKey, execState, errorMessage);
-                    if (insert != 1) {
-                        throw new SQLException("insert log error.");
-                    }
-                }
-                // 提交事务
-                transactionManager.commit(status);
-            } catch (Exception e) {
-                // 回滚
-                transactionManager.rollback(status);
-                logger.log(Level.SEVERE, "Transaction rolled back due to an error: " + e.getMessage(), e);
+            Optional<Integer> optional = checkExists(jobKey, triggerKey);
+            if (optional.isPresent()) {
+                // 更新字段值
+                int update = updateTaskLog(execState, errorMessage, optional.get());
+            } else {
+                int insert = insertTaskLog(jobKey, triggerKey, execState, errorMessage);
             }
         }
     }
