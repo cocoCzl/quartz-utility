@@ -1,5 +1,6 @@
 package com.coco.core;
 
+import org.quartz.CronScheduleBuilder;
 import org.quartz.Job;
 import org.quartz.JobBuilder;
 import org.quartz.JobDataMap;
@@ -68,46 +69,162 @@ public class SchedulerCore {
      *
      * @param triggerKey 触发器的唯一标识，由触发器名称和所属组名组成，用于在Quartz中唯一标识该触发器。
      * @param timeInterval 触发器触发的时间间隔，单位为分钟。
+     * @param misfireInstruction misfire 策略
      * @return 返回一个按指定分钟间隔无限循环触发的Trigger对象。
      */
-    public static Trigger getMinuteSimpleTrigger(TriggerKey triggerKey, int timeInterval) {
+    public static Trigger getMinuteSimpleTrigger(TriggerKey triggerKey, int timeInterval, int misfireInstruction) {
         SimpleScheduleBuilder scheduleBuilder = SimpleScheduleBuilder.simpleSchedule()
                 .withIntervalInMinutes(timeInterval)
                 // 配置触发器无限循环触发
-                .repeatForever()
-                // 配置错过触发的处理策略：保持剩余触发次数，跳过错过的触发器
-                .withMisfireHandlingInstructionNextWithRemainingCount();
+                .repeatForever();
+        
+        // 根据配置设置 misfire 策略
+        if (misfireInstruction != -1) {
+            switch (misfireInstruction) {
+                case org.quartz.SimpleTrigger.MISFIRE_INSTRUCTION_FIRE_NOW:
+                    scheduleBuilder.withMisfireHandlingInstructionFireNow();
+                    break;
+                case org.quartz.SimpleTrigger.MISFIRE_INSTRUCTION_RESCHEDULE_NEXT_WITH_EXISTING_COUNT:
+                    scheduleBuilder.withMisfireHandlingInstructionNextWithExistingCount();
+                    break;
+                case org.quartz.SimpleTrigger.MISFIRE_INSTRUCTION_RESCHEDULE_NEXT_WITH_REMAINING_COUNT:
+                    scheduleBuilder.withMisfireHandlingInstructionNextWithRemainingCount();
+                    break;
+                case org.quartz.SimpleTrigger.MISFIRE_INSTRUCTION_RESCHEDULE_NOW_WITH_EXISTING_REPEAT_COUNT:
+                    scheduleBuilder.withMisfireHandlingInstructionNowWithExistingCount();
+                    break;
+                case org.quartz.SimpleTrigger.MISFIRE_INSTRUCTION_RESCHEDULE_NOW_WITH_REMAINING_REPEAT_COUNT:
+                    scheduleBuilder.withMisfireHandlingInstructionNowWithRemainingCount();
+                    break;
+                default:
+                    // 默认使用保持剩余触发次数，跳过错过的触发器策略
+                    scheduleBuilder.withMisfireHandlingInstructionNextWithRemainingCount();
+                    break;
+            }
+        } else {
+            // 配置错过触发的处理策略：保持剩余触发次数，跳过错过的触发器
+            scheduleBuilder.withMisfireHandlingInstructionNextWithRemainingCount();
+        }
+        
         return TriggerBuilder.newTrigger()
                 .withIdentity(triggerKey)
                 .startNow()
                 .withSchedule(scheduleBuilder)
                 .build();
     }
+    
+    /**
+     * 获取一个按指定分钟间隔重复触发的触发器（使用默认misfire策略）。
+     *
+     * @param triggerKey 触发器的唯一标识，由触发器名称和所属组名组成，用于在Quartz中唯一标识该触发器。
+     * @param timeInterval 触发器触发的时间间隔，单位为分钟。
+     * @return 返回一个按指定分钟间隔无限循环触发的Trigger对象。
+     */
+    public static Trigger getMinuteSimpleTrigger(TriggerKey triggerKey, int timeInterval) {
+        return getMinuteSimpleTrigger(triggerKey, timeInterval, -1);
+    }
 
-    public static Trigger getHoursSimpleTrigger(TriggerKey triggerKey, int timeInterval) {
+    public static Trigger getHoursSimpleTrigger(TriggerKey triggerKey, int timeInterval, int misfireInstruction) {
         SimpleScheduleBuilder scheduleBuilder = SimpleScheduleBuilder.simpleSchedule()
                 .withIntervalInHours(timeInterval)
                 // 配置触发器无限循环触发
-                .repeatForever()
-                // 配置错过触发的处理策略：保持剩余触发次数，跳过错过的触发器
-                .withMisfireHandlingInstructionNextWithRemainingCount();
+                .repeatForever();
+        
+        // 根据配置设置 misfire 策略
+        if (misfireInstruction != -1) {
+            switch (misfireInstruction) {
+                case org.quartz.SimpleTrigger.MISFIRE_INSTRUCTION_FIRE_NOW:
+                    scheduleBuilder.withMisfireHandlingInstructionFireNow();
+                    break;
+                case org.quartz.SimpleTrigger.MISFIRE_INSTRUCTION_RESCHEDULE_NEXT_WITH_EXISTING_COUNT:
+                    scheduleBuilder.withMisfireHandlingInstructionNextWithExistingCount();
+                    break;
+                case org.quartz.SimpleTrigger.MISFIRE_INSTRUCTION_RESCHEDULE_NEXT_WITH_REMAINING_COUNT:
+                    scheduleBuilder.withMisfireHandlingInstructionNextWithRemainingCount();
+                    break;
+                case org.quartz.SimpleTrigger.MISFIRE_INSTRUCTION_RESCHEDULE_NOW_WITH_EXISTING_REPEAT_COUNT:
+                    scheduleBuilder.withMisfireHandlingInstructionNowWithExistingCount();
+                    break;
+                case org.quartz.SimpleTrigger.MISFIRE_INSTRUCTION_RESCHEDULE_NOW_WITH_REMAINING_REPEAT_COUNT:
+                    scheduleBuilder.withMisfireHandlingInstructionNowWithRemainingCount();
+                    break;
+                default:
+                    // 默认使用保持剩余触发次数，跳过错过的触发器策略
+                    scheduleBuilder.withMisfireHandlingInstructionNextWithRemainingCount();
+                    break;
+            }
+        } else {
+            // 配置错过触发的处理策略：保持剩余触发次数，跳过错过的触发器
+            scheduleBuilder.withMisfireHandlingInstructionNextWithRemainingCount();
+        }
+        
         return TriggerBuilder.newTrigger()
                 .withIdentity(triggerKey)
                 .startNow()
                 .withSchedule(scheduleBuilder)
                 .build();
     }
+    
+    public static Trigger getHoursSimpleTrigger(TriggerKey triggerKey, int timeInterval) {
+        return getHoursSimpleTrigger(triggerKey, timeInterval, -1);
+    }
 
-    public static Trigger getSecondsSimpleTrigger(TriggerKey triggerKey, int timeInterval) {
+    public static Trigger getSecondsSimpleTrigger(TriggerKey triggerKey, int timeInterval, int misfireInstruction) {
         SimpleScheduleBuilder scheduleBuilder = SimpleScheduleBuilder.simpleSchedule()
                 .withIntervalInSeconds(timeInterval)
                 // 配置触发器无限循环触发
-                .repeatForever()
-                // 配置错过触发的处理策略：保持剩余触发次数，跳过错过的触发器
-                .withMisfireHandlingInstructionNextWithRemainingCount();
+                .repeatForever();
+        
+        // 根据配置设置 misfire 策略
+        if (misfireInstruction != -1) {
+            switch (misfireInstruction) {
+                case org.quartz.SimpleTrigger.MISFIRE_INSTRUCTION_FIRE_NOW:
+                    scheduleBuilder.withMisfireHandlingInstructionFireNow();
+                    break;
+                case org.quartz.SimpleTrigger.MISFIRE_INSTRUCTION_RESCHEDULE_NEXT_WITH_EXISTING_COUNT:
+                    scheduleBuilder.withMisfireHandlingInstructionNextWithExistingCount();
+                    break;
+                case org.quartz.SimpleTrigger.MISFIRE_INSTRUCTION_RESCHEDULE_NEXT_WITH_REMAINING_COUNT:
+                    scheduleBuilder.withMisfireHandlingInstructionNextWithRemainingCount();
+                    break;
+                case org.quartz.SimpleTrigger.MISFIRE_INSTRUCTION_RESCHEDULE_NOW_WITH_EXISTING_REPEAT_COUNT:
+                    scheduleBuilder.withMisfireHandlingInstructionNowWithExistingCount();
+                    break;
+                case org.quartz.SimpleTrigger.MISFIRE_INSTRUCTION_RESCHEDULE_NOW_WITH_REMAINING_REPEAT_COUNT:
+                    scheduleBuilder.withMisfireHandlingInstructionNowWithRemainingCount();
+                    break;
+                default:
+                    // 默认使用保持剩余触发次数，跳过错过的触发器策略
+                    scheduleBuilder.withMisfireHandlingInstructionNextWithRemainingCount();
+                    break;
+            }
+        } else {
+            // 配置错过触发的处理策略：保持剩余触发次数，跳过错过的触发器
+            scheduleBuilder.withMisfireHandlingInstructionNextWithRemainingCount();
+        }
+        
         return TriggerBuilder.newTrigger()
                 .withIdentity(triggerKey)
                 .startNow()
+                .withSchedule(scheduleBuilder)
+                .build();
+    }
+    
+    public static Trigger getSecondsSimpleTrigger(TriggerKey triggerKey, int timeInterval) {
+        return getSecondsSimpleTrigger(triggerKey, timeInterval, -1);
+    }
+    
+    /**
+     * 获取一个 Cron 触发器
+     *
+     * @param triggerKey 触发器的唯一标识，由触发器名称和所属组名组成
+     * @param cronExpression Cron 表达式
+     * @return 返回一个 Cron 触发器
+     */
+    public static Trigger getCronTrigger(TriggerKey triggerKey, String cronExpression) {
+        CronScheduleBuilder scheduleBuilder = CronScheduleBuilder.cronSchedule(cronExpression);
+        return TriggerBuilder.newTrigger()
+                .withIdentity(triggerKey)
                 .withSchedule(scheduleBuilder)
                 .build();
     }

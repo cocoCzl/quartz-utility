@@ -33,6 +33,8 @@ create table quartz_task_log (
   trigger_key varchar(64) not null comment 'trigger标识',
   exec_state tinyint not null comment '0 失败, 1 成功',
   error_message text comment '错误信息',
+  stack_trace text comment '错误堆栈信息',
+  execution_time_ms bigint comment '任务执行时间(毫秒)',
   execute_time datetime not null default current_timestamp on update current_timestamp comment '执行时间'
 );
 ALTER TABLE quartz_task_log
@@ -49,6 +51,8 @@ job_key varchar(64) not null,
 trigger_key varchar(64) not null,
 exec_state SMALLINT NOT NULL,
 error_message TEXT,
+stack_trace TEXT,
+execution_time_ms BIGINT,
 execute_time TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 CREATE UNIQUE INDEX unique_log_idx ON quartz_task_log (job_key, trigger_key);  
@@ -59,19 +63,84 @@ CREATE UNIQUE INDEX unique_log_idx ON quartz_task_log (job_key, trigger_key);
 
 <font style="color:#DF2A3F;">quartz可以单独配置数据源，也可以使用SpringBoot项目默认的数据源！</font>
 
-### 属性
-#### QuartzComponent类
+## 新增功能特性
+
+### 1. Cron 表达式支持
+现在支持使用 Cron 表达式来定义复杂的调度规则。
+
+### 2. 更多配置选项
+- Misfire 策略配置
+- 更详细的任务属性配置
+
+### 3. 任务监控服务
+提供 `TaskMonitoringService` 来监控任务执行情况。
+
+## 使用示例
+
+### 1. 使用高级任务构建器 (推荐)
+
 ```java
-    // 任务标识设置
-    private final String description; 默认值Default description
-    // 任务恢复设置
-    private final boolean shouldRecover; 默认值false
-    // 时间间隔
-    private final int timeInterval; 默认值5
-    // 间隔时间单位
-    private final TimeEnum timeEnum; 默认值TimeEnum.MINUTES 分钟
-    // 任务持久化设置
-    private final boolean durability; 默认值true
+@Component
+public class TaskSchedulerExample {
+    
+    @Autowired
+    private CoQuartzScheduler scheduler;
+    
+    public void scheduleTasks() {
+        try {
+            // 简单间隔任务
+            QuartzTaskBuilder.newBuilder()
+                .jobClass(SampleJob.class)
+                .jobName("sampleJob")
+                .jobGroup("myGroup")
+                .description("这是一个示例任务")
+                .intervalInSeconds(30) // 每30秒执行一次
+                .durable(true)
+                .recoverable(false)
+                .schedule(scheduler);
+                
+            // Cron 表达式任务
+            QuartzTaskBuilder.newBuilder()
+                .jobClass(ScheduledJob.class)
+                .jobName("scheduledJob")
+                .description("Cron任务示例")
+                .cron("0 0 12 * * ?") // 每天中午12点执行
+                .schedule(scheduler);
+                
+        } catch (SchedulerException e) {
+            e.printStackTrace();
+        }
+    }
+}
+```
+
+### 2. 使用 QuartzComponent 配置 (传统方式)
+
+#### QuartzComponent类 (新增属性)
+```java
+// 新增的属性
+private final String cronExpression;        // Cron 表达式
+private final boolean useCronTrigger;       // 是否使用 Cron 触发器
+private final int misfireInstruction;       // Misfire 策略
+private final int priority;                 // 任务优先级
+
+// 使用示例：
+QuartzComponent quartzComponent = new QuartzComponent.Builder()
+        .setTimeInterval(1)
+        .setTimeEnum(TimeEnum.MINUTES)
+        .setDescription("test")
+        .setDurability(true)
+        .setShouldRecover(true)
+        .setPriority(7)  // 设置优先级
+        .setMisfireInstruction(1)  // 设置 misfire 策略
+        .build();
+        
+// 使用 Cron 表达式
+QuartzComponent cronComponent = new QuartzComponent.Builder()
+        .setCronExpression("0 0/5 * * * ?")  // 每5分钟执行一次
+        .setDescription("Cron trigger example")
+        .setDurability(true)
+        .build();
 ```
 
 #### <font style="color:rgba(0, 0, 0, 0.85);">JobBuilder属性</font>
@@ -99,14 +168,59 @@ CREATE UNIQUE INDEX unique_log_idx ON quartz_task_log (job_key, trigger_key);
 + `**usingJobData(JobDataMap dataMap)**`：
   - **用途**：为任务添加参数数据，`JobDataMap` 是一个键值对的集合，可以存储任意类型的数据。在任务执行时，可以通过 `JobExecutionContext` 获取这些数据。
 
+### 3. 任务监控和管理
+
+```java
+@Service
+public class TaskMonitoringExample {
+    
+    @Autowired
+    private TaskMonitoringService monitoringService;
+    
+    @Autowired
+    private CoQuartzScheduler scheduler;
+    
+    public void monitorTasks() {
+        // 获取任务统计信息
+        TaskMonitoringService.TaskStatistics stats = monitoringService.getTaskStatistics();
+        System.out.println("总执行次数: " + stats.getTotalExecutions());
+        System.out.println("成功执行次数: " + stats.getSuccessfulExecutions());
+        System.out.println("失败执行次数: " + stats.getFailedExecutions());
+        System.out.println("成功率: " + stats.getSuccessRate() + "%");
+        
+        // 获取指定任务的执行历史
+        List<TaskMonitoringService.TaskExecutionLog> logs = 
+            monitoringService.getTaskExecutionHistory("DEFAULT.sampleJob", 10);
+            
+        // 获取最近的失败任务
+        List<TaskMonitoringService.TaskExecutionLog> failedLogs = 
+            monitoringService.getRecentFailedTasks(5);
+            
+        // 清理30天前的日志
+        int deletedCount = monitoringService.cleanupLogs(30);
+        System.out.println("清理了 " + deletedCount + " 条历史日志");
+        
+        // 暂停/恢复/删除任务
+        JobKey jobKey = scheduler.getJobKey("sampleJob", "myGroup");
+        try {
+            scheduler.pauseJob(jobKey);   // 暂停任务
+            scheduler.resumeJob(jobKey);  // 恢复任务
+            scheduler.deleteJob(jobKey);  // 删除任务
+        } catch (SchedulerException e) {
+            e.printStackTrace();
+        }
+    }
+}
+```
+
 ### 使用
-原本Quartz业务代码的Job类需要实现org.quartz.Job接口，现在改为继承com.coco.core.BaseAbstractQuartzJob类。重写executeQuartzTask方法，实际的定时任务实现代码就卸载executeQuartzTask方法中。
+原本Quartz业务代码的Job类需要实现org.quartz.Job接口，现在改为继承com.coco.core.BaseAbstractQuartzJob类。重写executeQuartz方法，实际的定时任务实现代码就写在executeQuartz方法中。
 
 #### BaseAbstractQuartzJob
-会执行日志落库代码，实际定时任务执行代码在子类的executeQuartzTask实现中。
+会执行详细日志落库代码（包括执行时间、错误堆栈等），实际定时任务执行代码在子类的executeQuartz实现中。
 
 #### CoQuartzScheduler
-代替原始的Scheduler，有多种重载方法，按需使用。
+代替原始的Scheduler，有多种重载方法，按需使用。新增了 Cron 任务调度、任务管理等功能。
 
 #### JobKey、TriggerKey获取
 实际获取在SchedulerCore中，可以自定义name和group，如果不传将使用默认值。
@@ -138,6 +252,17 @@ public class DollarPenguinStarter {
         TriggerKey triggerKey = coQuartzScheduler.getTriggerKey("test", "test_group");
         TestJob testJob = new TestJob();
         try {
+            // 使用 Cron 表达式调度任务
+            QuartzComponent cronComponent = new QuartzComponent.Builder()
+                    .setCronExpression("0 0/1 * * * ?") // 每分钟执行一次
+                    .setDescription("test cron job")
+                    .setDurability(true)
+                    .setShouldRecover(true)
+                    .build();
+            coQuartzScheduler.scheduleCronJob(TestJob.class, jobKey, triggerKey,
+                    jobDataMap, null, cronComponent);
+                    
+            // 或使用简单间隔调度任务
             QuartzComponent quartzComponent = new QuartzComponent.Builder()
                     .setTimeInterval(1)
                     .setTimeEnum(TimeEnum.MINUTES)
