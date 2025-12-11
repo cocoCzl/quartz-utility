@@ -145,27 +145,27 @@ QuartzComponent cronComponent = new QuartzComponent.Builder()
 
 #### <font style="color:rgba(0, 0, 0, 0.85);">JobBuilder属性</font>
 ##### <font style="color:rgb(0, 0, 0);">1. 任务类设置</font>
-+ `**newJob(Class<? extends Job> jobClass)**`：
++ `newJob(Class<? extends Job> jobClass)`：
   - **用途**：指定要执行的任务类，该类必须实现 `org.quartz.Job` 接口。Quartz 在调度任务时，会实例化这个类并调用其 `execute` 方法来执行具体的任务逻辑。
 
 ##### <font style="color:rgb(0, 0, 0);">2. 任务标识设置</font>
-+ `**withIdentity(JobKey jobKey)**`：
++ `withIdentity(JobKey jobKey)`：
   - **用途**：为任务设置唯一的标识，`JobKey` 由任务名称和所属组名组成。在 Quartz 中，每个任务都需要有一个唯一的 `JobKey`，这样可以方便地对任务进行管理和调度。
 
 ##### <font style="color:rgb(0, 0, 0);">3. 任务描述设置</font>
-+ `**withDescription(String description)**`：
++ `withDescription(String description)`：
   - **用途**：为任务添加描述信息，该描述信息可以在管理界面或日志中查看，有助于理解任务的用途和功能。
 
 ##### <font style="color:rgb(0, 0, 0);">4. 任务恢复设置</font>
-+ `**requestRecovery(boolean requestRecovery)**`：
++ `requestRecovery(boolean requestRecovery)`：
   - **用途**：设置任务是否请求恢复。当 `Quartz` 节点在任务执行过程中发生故障并重启后，如果该任务设置了请求恢复（`requestRecovery` 为 `true`），且任务实现了 `StatefulJob` 接口或有相应的恢复逻辑，那么该任务会被重新执行。
 
 ##### <font style="color:rgb(0, 0, 0);">5. 任务持久化设置</font>
-+ `**storeDurably()**`：
++ `storeDurably()`：
   - **用途**：设置任务是否持久化存储。若设置为持久化（调用此方法），即使没有 `Trigger` 关联该任务，任务也会保留在 `Quartz` 中，直到显式地删除它。这对于一些长期运行的任务或需要在特定条件下手动触发的任务很有用。
 
 ##### <font style="color:rgb(0, 0, 0);">6. 任务数据设置</font>
-+ `**usingJobData(JobDataMap dataMap)**`：
++ `usingJobData(JobDataMap dataMap)`：
   - **用途**：为任务添加参数数据，`JobDataMap` 是一个键值对的集合，可以存储任意类型的数据。在任务执行时，可以通过 `JobExecutionContext` 获取这些数据。
 
 ### 3. 任务监控和管理
