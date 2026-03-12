@@ -28,4 +28,13 @@ public class QuartzUtilityException extends RuntimeException {
         this.code = code;
     }
 
+    /**
+     * 获取错误码
+     *
+     * @return 错误码
+     */
+    public int getCode() {
+        return code;
+    }
+
 }

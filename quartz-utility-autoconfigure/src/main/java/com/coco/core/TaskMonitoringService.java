@@ -1,5 +1,7 @@
 package com.coco.core;
 
+import com.coco.dto.TaskExecutionLog;
+import com.coco.dto.TaskStatistics;
 import com.coco.enums.LogTaskExecStateEnum;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Qualifier;
@@ -10,6 +12,7 @@ import java.sql.Timestamp;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Map;
+import java.util.stream.Collectors;
 
 /**
  * 任务监控服务，提供任务执行情况的查询和监控功能
@@ -130,79 +133,6 @@ public class TaskMonitoringService {
 
         return quartzJdbcTemplate.query(sql,
             (rs, rowNum) -> Map.entry(rs.getString("job_key"), rs.getDouble("avg_execution_time"))
-        ).stream().collect(java.util.stream.Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue));
-    }
-    
-    /**
-     * 统计信息类
-     */
-    public static class TaskStatistics {
-        private int totalExecutions;
-        private int successfulExecutions;
-        private int failedExecutions;
-        private double successRate;
-
-        public int getTotalExecutions() {
-            return totalExecutions;
-        }
-        public void setTotalExecutions(int totalExecutions) {
-            this.totalExecutions = totalExecutions;
-        }
-        
-        public int getSuccessfulExecutions() {
-            return successfulExecutions;
-        }
-        public void setSuccessfulExecutions(int successfulExecutions) {
-            this.successfulExecutions = successfulExecutions;
-        }
-        
-        public int getFailedExecutions() {
-            return failedExecutions;
-        }
-        public void setFailedExecutions(int failedExecutions) {
-            this.failedExecutions = failedExecutions;
-        }
-        
-        public double getSuccessRate() {
-            if (totalExecutions == 0) {
-                return 0.0;
-            }
-            return (double) successfulExecutions / totalExecutions * 100;
-        }
-    }
-    
-    /**
-     * 任务执行日志类
-     */
-    public static class TaskExecutionLog {
-        private String jobKey;
-        private String triggerKey;
-        private byte execState;
-        private String errorMessage;
-        private String stackTrace;
-        private Long executionTimeMs;
-        private Timestamp executeTime;
-
-        // Getters and setters
-        public String getJobKey() { return jobKey; }
-        public void setJobKey(String jobKey) { this.jobKey = jobKey; }
-
-        public String getTriggerKey() { return triggerKey; }
-        public void setTriggerKey(String triggerKey) { this.triggerKey = triggerKey; }
-
-        public byte getExecState() { return execState; }
-        public void setExecState(byte execState) { this.execState = execState; }
-
-        public String getErrorMessage() { return errorMessage; }
-        public void setErrorMessage(String errorMessage) { this.errorMessage = errorMessage; }
-
-        public String getStackTrace() { return stackTrace; }
-        public void setStackTrace(String stackTrace) { this.stackTrace = stackTrace; }
-
-        public Long getExecutionTimeMs() { return executionTimeMs; }
-        public void setExecutionTimeMs(Long executionTimeMs) { this.executionTimeMs = executionTimeMs; }
-
-        public Timestamp getExecuteTime() { return executeTime; }
-        public void setExecuteTime(Timestamp executeTime) { this.executeTime = executeTime; }
+        ).stream().collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue));
     }
 }

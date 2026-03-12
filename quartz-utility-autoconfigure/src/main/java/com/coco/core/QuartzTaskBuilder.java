@@ -23,6 +23,11 @@ public class QuartzTaskBuilder {
     private boolean durability = true;
     private int misfireInstruction = -1;
     
+    // 重试和超时配置
+    private int retryTimes = 0;
+    private long retryInterval = 1000;  // 默认 1 秒
+    private long timeout = 0;  // 默认不超时
+    
     private QuartzTaskBuilder() {}
     
     public static QuartzTaskBuilder newBuilder() {
@@ -86,10 +91,31 @@ public class QuartzTaskBuilder {
         return this;
     }
     
-    
-    
-    public QuartzTaskBuilder misfireInstruction(int misfireInstruction) {
+    public void misfireInstruction(int misfireInstruction) {
         this.misfireInstruction = misfireInstruction;
+    }
+    
+    /**
+     * 设置失败重试次数
+     */
+    public QuartzTaskBuilder retryTimes(int retryTimes) {
+        this.retryTimes = retryTimes;
+        return this;
+    }
+    
+    /**
+     * 设置重试间隔时间（毫秒）
+     */
+    public QuartzTaskBuilder retryInterval(long retryInterval) {
+        this.retryInterval = retryInterval;
+        return this;
+    }
+    
+    /**
+     * 设置任务超时时间（毫秒），0 表示不限制
+     */
+    public QuartzTaskBuilder timeout(long timeout) {
+        this.timeout = timeout;
         return this;
     }
     
@@ -133,10 +159,19 @@ public class QuartzTaskBuilder {
         JobKey jobKey = scheduler.getJobKey(jobName, jobGroup);
         TriggerKey triggerKey = scheduler.getTriggerKey(triggerName != null ? triggerName : jobName, triggerGroup);
         
-        JobDataMap dataMap = null;
+        // 创建 JobDataMap 并添加配置
+        JobDataMap dataMap = new JobDataMap();
+        
+        // 添加用户自定义数据
         if (jobDataMap != null) {
-            dataMap = new JobDataMap(jobDataMap);
+            dataMap.putAll(jobDataMap);
         }
+        
+        // 添加重试和超时配置
+        dataMap.put(BaseAbstractQuartzJob.RETRY_TIMES_KEY, retryTimes);
+        dataMap.put(BaseAbstractQuartzJob.RETRY_INTERVAL_KEY, retryInterval);
+        dataMap.put(BaseAbstractQuartzJob.TIMEOUT_KEY, timeout);
+        dataMap.put(BaseAbstractQuartzJob.CURRENT_RETRY_KEY, 0);
         
         QuartzComponent component = buildQuartzComponent();
         
