@@ -57,6 +57,16 @@ public @interface QuartzJob {
     long retryInterval() default 1000;
 
     /**
+     * 是否启用指数退避重试策略
+     */
+    boolean exponentialBackoff() default true;
+
+    /**
+     * 指数退避乘数（仅在 exponentialBackoff=true 时生效）
+     */
+    double backoffMultiplier() default 1.5;
+
+    /**
      * 任务超时时间（毫秒），0 表示不限制
      */
     long timeout() default 0;

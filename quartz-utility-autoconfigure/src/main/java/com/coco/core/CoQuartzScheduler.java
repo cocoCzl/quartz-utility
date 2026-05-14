@@ -127,7 +127,7 @@ public record CoQuartzScheduler(Scheduler scheduler) {
 
         if (!quartzComponent.isUseCronTrigger() || quartzComponent.getCronExpression() == null) {
             throw new QuartzUtilityException("Cron expression is required for cron job",
-                    QuartzUtilityException.PARAMETER_ABNORMAL);
+                    QuartzUtilityException.ErrorCode.PARAMETER_ABNORMAL);
         }
 
         JobDetail jobDetail = SchedulerCore.getJobDetail(jobClass, jobKey, jobDataMap,
@@ -479,7 +479,7 @@ public record CoQuartzScheduler(Scheduler scheduler) {
             case SECONDS -> SchedulerCore.getSecondsSimpleTrigger(triggerKey,
                     quartzComponent.getTimeInterval(), quartzComponent.getMisfireInstruction());
             default -> throw new QuartzUtilityException("The interval type is abnormal",
-                    QuartzUtilityException.PARAMETER_ABNORMAL);
+                    QuartzUtilityException.ErrorCode.PARAMETER_ABNORMAL);
         };
     }
 
@@ -495,7 +495,7 @@ public record CoQuartzScheduler(Scheduler scheduler) {
             case MINUTES -> quartzComponent.getTimeInterval() * 60 * 1000;
             case SECONDS -> quartzComponent.getTimeInterval() * 1000;
             default -> throw new QuartzUtilityException("The interval type is abnormal",
-                    QuartzUtilityException.PARAMETER_ABNORMAL);
+                    QuartzUtilityException.ErrorCode.PARAMETER_ABNORMAL);
         };
     }
 }

@@ -25,11 +25,19 @@ public abstract class BaseAbstractQuartzJob implements Job {
 
     private static final Logger logger = LoggerFactory.getLogger(BaseAbstractQuartzJob.class);
 
+    private static final ExecutorService TIMEOUT_EXECUTOR = Executors.newCachedThreadPool(r -> {
+        Thread t = new Thread(r, "quartz-timeout-executor");
+        t.setDaemon(true);
+        return t;
+    });
+
     // JobDataMap 中的键名
     public static final String RETRY_TIMES_KEY = "retryTimes";
     public static final String RETRY_INTERVAL_KEY = "retryInterval";
     public static final String CURRENT_RETRY_KEY = "currentRetry";
     public static final String TIMEOUT_KEY = "timeout";
+    public static final String EXPONENTIAL_BACKOFF_KEY = "exponentialBackoff";
+    public static final String BACKOFF_MULTIPLIER_KEY = "backoffMultiplier";
 
     @Autowired
     @Qualifier("quartzJdbcTemplate")
@@ -60,7 +68,7 @@ public abstract class BaseAbstractQuartzJob implements Job {
 
         logger.info("Starting task execution: jobKey={}, triggerKey={}", jobKey, triggerKey);
 
-        byte execState = LogTaskExecStateEnum.EXEC_SUCCESS.getCode();
+        int execState = LogTaskExecStateEnum.EXEC_SUCCESS.getCode();
         String errorMessage = null;
         String stackTrace = null;
         int retryCount = 0;
@@ -192,54 +200,32 @@ public abstract class BaseAbstractQuartzJob implements Job {
     /**
      * 带超时控制的任务执行
      */
-    private void executeWithTimeout(JobExecutionContext context, long timeoutMs) 
+    private void executeWithTimeout(JobExecutionContext context, long timeoutMs)
             throws Throwable, TimeoutException {
-        
-        ExecutorService executor = Executors.newSingleThreadExecutor();
-        
+
+        Future<Void> future = TIMEOUT_EXECUTOR.submit(() -> {
+            try {
+                executeQuartz(context);
+            } catch (Throwable e) {
+                if (e instanceof Error) {
+                    throw (Error) e;
+                } else if (e instanceof Exception) {
+                    throw (Exception) e;
+                } else {
+                    throw new RuntimeException(e);
+                }
+            }
+            return null;
+        });
+
         try {
-            // 使用 Callable<Void>，在 lambda 中捕获 Throwable 并包装
-            Future<Void> future = executor.submit(() -> {
-                try {
-                    executeQuartz(context);
-                } catch (Throwable e) {
-                    // 将 Throwable 包装成 RuntimeException
-                    // 因为 Callable.call() 只能抛出 Exception，不能抛出 Throwable
-                    if (e instanceof Error) {
-                        // Error 直接抛出
-                        throw (Error) e;
-                    } else if (e instanceof Exception) {
-                        // Exception 直接抛出
-                        throw (Exception) e;
-                    } else {
-                        // 其他 Throwable（很少见）包装成 RuntimeException
-                        throw new RuntimeException(e);
-                    }
-                }
-                return null;
-            });
-
-            try {
-                future.get(timeoutMs, TimeUnit.MILLISECONDS);
-            } catch (TimeoutException e) {
-                future.cancel(true);
-                logger.error("Task execution timeout after {}ms", timeoutMs);
-                throw new TimeoutException("Task execution timeout after " + timeoutMs + "ms");
-
-            } catch (ExecutionException e) {
-                // 获取并抛出原始异常
-                throw e.getCause();
-            }
-
-        } finally {
-            executor.shutdownNow();
-            try {
-                if (!executor.awaitTermination(5, TimeUnit.SECONDS)) {
-                    logger.warn("Executor did not terminate in time");
-                }
-            } catch (InterruptedException e) {
-                Thread.currentThread().interrupt();
-            }
+            future.get(timeoutMs, TimeUnit.MILLISECONDS);
+        } catch (TimeoutException e) {
+            future.cancel(true);
+            logger.error("Task execution timeout after {}ms", timeoutMs);
+            throw new TimeoutException("Task execution timeout after " + timeoutMs + "ms");
+        } catch (ExecutionException e) {
+            throw e.getCause();
         }
     }
 
@@ -248,11 +234,15 @@ public abstract class BaseAbstractQuartzJob implements Job {
      */
     private RetryContext getRetryContext(JobExecutionContext context) {
         JobDataMap dataMap = context.getJobDetail().getJobDataMap();
-        
+
         int retryTimes = dataMap.getInt(RETRY_TIMES_KEY);
         long retryInterval = dataMap.getLong(RETRY_INTERVAL_KEY);
+        boolean exponentialBackoff = dataMap.containsKey(EXPONENTIAL_BACKOFF_KEY)
+                ? dataMap.getBoolean(EXPONENTIAL_BACKOFF_KEY) : true;
+        double backoffMultiplier = dataMap.containsKey(BACKOFF_MULTIPLIER_KEY)
+                ? dataMap.getDouble(BACKOFF_MULTIPLIER_KEY) : 1.5;
 
-        return new RetryContext(retryTimes, retryInterval, true, 1.5);
+        return new RetryContext(retryTimes, retryInterval, exponentialBackoff, backoffMultiplier);
     }
 
     /**
@@ -287,10 +277,8 @@ public abstract class BaseAbstractQuartzJob implements Job {
      */
     public void insertDetailedTaskLog(String jobKey, String triggerKey, int execState,
             String errorMessage, String stackTrace, long executionTimeInMs) {
-        quartzJdbcTemplate.update(INSERT_DETAILED_SQL, jobKey, triggerKey, execState,
+        quartzJdbcTemplate.update(QuartzSign.INSERT_DETAILED_SQL, jobKey, triggerKey, execState,
                 errorMessage, stackTrace, executionTimeInMs,
                 new Timestamp(System.currentTimeMillis()));
     }
-
-    private static final String INSERT_DETAILED_SQL = "INSERT INTO quartz_task_log (job_key, trigger_key, exec_state, error_message, stack_trace, execution_time_ms, execute_time) VALUES (?, ?, ?, ?, ?, ?, ?)";
 }

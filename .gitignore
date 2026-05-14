@@ -36,3 +36,7 @@ build/
 
 ### log ###
 logs/
+
+### Maven settings ###
+temp-settings.xml
+settings.xml

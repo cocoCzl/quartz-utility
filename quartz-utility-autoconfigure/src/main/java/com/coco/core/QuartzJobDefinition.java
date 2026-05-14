@@ -17,6 +17,8 @@ public class QuartzJobDefinition {
     private final boolean recoverable;
     private final int retryTimes;
     private final long retryInterval;
+    private final boolean exponentialBackoff;
+    private final double backoffMultiplier;
     private final long timeout;
     private final boolean enabled;
     private final int misfireInstruction;
@@ -32,6 +34,8 @@ public class QuartzJobDefinition {
         this.recoverable = builder.recoverable;
         this.retryTimes = builder.retryTimes;
         this.retryInterval = builder.retryInterval;
+        this.exponentialBackoff = builder.exponentialBackoff;
+        this.backoffMultiplier = builder.backoffMultiplier;
         this.timeout = builder.timeout;
         this.enabled = builder.enabled;
         this.misfireInstruction = builder.misfireInstruction;
@@ -52,6 +56,8 @@ public class QuartzJobDefinition {
                 .recoverable(annotation.recoverable())
                 .retryTimes(annotation.retryTimes())
                 .retryInterval(annotation.retryInterval())
+                .exponentialBackoff(annotation.exponentialBackoff())
+                .backoffMultiplier(annotation.backoffMultiplier())
                 .timeout(annotation.timeout())
                 .enabled(annotation.enabled())
                 .misfireInstruction(annotation.misfirePolicy().getCode())
@@ -96,6 +102,14 @@ public class QuartzJobDefinition {
         return retryInterval;
     }
 
+    public boolean isExponentialBackoff() {
+        return exponentialBackoff;
+    }
+
+    public double getBackoffMultiplier() {
+        return backoffMultiplier;
+    }
+
     public long getTimeout() {
         return timeout;
     }
@@ -129,6 +143,8 @@ public class QuartzJobDefinition {
         private boolean recoverable = false;
         private int retryTimes;
         private long retryInterval = 1000;
+        private boolean exponentialBackoff = true;
+        private double backoffMultiplier = 1.5;
         private long timeout;
         private boolean enabled = true;
         private int misfireInstruction = -1;
@@ -176,6 +192,16 @@ public class QuartzJobDefinition {
 
         public Builder retryInterval(long retryInterval) {
             this.retryInterval = retryInterval;
+            return this;
+        }
+
+        public Builder exponentialBackoff(boolean exponentialBackoff) {
+            this.exponentialBackoff = exponentialBackoff;
+            return this;
+        }
+
+        public Builder backoffMultiplier(double backoffMultiplier) {
+            this.backoffMultiplier = backoffMultiplier;
             return this;
         }
 

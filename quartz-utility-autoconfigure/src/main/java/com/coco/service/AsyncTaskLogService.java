@@ -1,6 +1,7 @@
 package com.coco.service;
 
 import com.coco.config.QuartzUtilityProperties;
+import com.coco.core.QuartzSign;
 import jakarta.annotation.PreDestroy;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -38,11 +39,7 @@ public class AsyncTaskLogService {
     @Autowired
     private QuartzUtilityProperties properties;
 
-    private static final String INSERT_DETAILED_SQL = 
-            "INSERT INTO quartz_task_log (job_key, trigger_key, exec_state, error_message, stack_trace, execution_time_ms, execute_time) " +
-            "VALUES (?, ?, ?, ?, ?, ?, ?)";
-
-    // 日志队列（默认容量 1000）
+    // 日志队列
     private final BlockingQueue<TaskLogEntry> logQueue;
 
     // 批量写入大小（默认 100）
@@ -53,9 +50,9 @@ public class AsyncTaskLogService {
     private final AtomicLong totalLogsWritten = new AtomicLong(0);
     private final AtomicLong totalBatchesWritten = new AtomicLong(0);
 
-    public AsyncTaskLogService() {
-        this.logQueue = new LinkedBlockingQueue<>(1000);
-        logger.info("AsyncTaskLogService initialized with queue capacity: 1000");
+    public AsyncTaskLogService(QuartzUtilityProperties properties) {
+        this.logQueue = new LinkedBlockingQueue<>(properties.getAsync().getLogQueueCapacity());
+        logger.info("AsyncTaskLogService initialized with queue capacity: {}", properties.getAsync().getLogQueueCapacity());
     }
 
     /**
@@ -140,10 +137,13 @@ public class AsyncTaskLogService {
 
         } catch (Exception e) {
             logger.error("Failed to flush {} task logs: {}", batch.size(), e.getMessage(), e);
-            
-            // 写入失败，重新放回队列（避免丢失）
+
             for (TaskLogEntry entry : batch) {
-                logQueue.offer(entry);
+                boolean reOffered = logQueue.offer(entry);
+                if (!reOffered) {
+                    logger.error("Log entry dropped due to queue full: jobKey={}, triggerKey={}",
+                            entry.getJobKey(), entry.getTriggerKey());
+                }
             }
         }
     }
@@ -158,7 +158,7 @@ public class AsyncTaskLogService {
             return;
         }
 
-        quartzJdbcTemplate.batchUpdate(INSERT_DETAILED_SQL, new BatchPreparedStatementSetter() {
+        quartzJdbcTemplate.batchUpdate(QuartzSign.INSERT_DETAILED_SQL, new BatchPreparedStatementSetter() {
             @Override
             public void setValues(PreparedStatement ps, int i) throws SQLException {
                 TaskLogEntry log = logs.get(i);

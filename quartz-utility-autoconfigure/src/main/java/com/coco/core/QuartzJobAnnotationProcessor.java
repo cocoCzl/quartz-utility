@@ -98,9 +98,11 @@ public class QuartzJobAnnotationProcessor {
                 .description(definition.getDescription())
                 .durable(definition.isDurable())
                 .recoverable(definition.isRecoverable())
-                .retryTimes(definition.getRetryTimes())           // 添加重试次数
-                .retryInterval(definition.getRetryInterval())     // 添加重试间隔
-                .timeout(definition.getTimeout());                // 添加超时时间
+                .retryTimes(definition.getRetryTimes())
+                .retryInterval(definition.getRetryInterval())
+                .exponentialBackoff(definition.isExponentialBackoff())
+                .backoffMultiplier(definition.getBackoffMultiplier())
+                .timeout(definition.getTimeout());
 
         // 设置触发器类型
         if (definition.isUseCron()) {

@@ -7,17 +7,17 @@ import com.coco.exception.InvalidExecStateException;
  */
 public enum LogTaskExecStateEnum {
 
-    EXEC_FAIL((byte) 0),
-    EXEC_SUCCESS((byte) 1),
-    UNKNOWN((byte) -99);
+    EXEC_FAIL(0),
+    EXEC_SUCCESS(1),
+    UNKNOWN(-99);
 
-    private final byte code;
+    private final int code;
 
-    LogTaskExecStateEnum(byte code) {
+    LogTaskExecStateEnum(int code) {
         this.code = code;
     }
 
-    public byte getCode() {
+    public int getCode() {
         return code;
     }
 
@@ -28,7 +28,7 @@ public enum LogTaskExecStateEnum {
      * @return 对应的枚举值
      * @throws InvalidExecStateException 如果状态码无效
      */
-    public static LogTaskExecStateEnum parse(byte code) {
+    public static LogTaskExecStateEnum parse(int code) {
         for (LogTaskExecStateEnum statusEnum : LogTaskExecStateEnum.values()) {
             if (statusEnum.code == code) {
                 return statusEnum;

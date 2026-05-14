@@ -192,6 +192,11 @@ public class QuartzUtilityProperties {
          */
         private String threadNamePrefix = "quartz-async-";
 
+        /**
+         * 日志队列容量
+         */
+        private int logQueueCapacity = 1000;
+
         public boolean isEnabled() {
             return enabled;
         }
@@ -230,6 +235,14 @@ public class QuartzUtilityProperties {
 
         public void setThreadNamePrefix(String threadNamePrefix) {
             this.threadNamePrefix = threadNamePrefix;
+        }
+
+        public int getLogQueueCapacity() {
+            return logQueueCapacity;
+        }
+
+        public void setLogQueueCapacity(int logQueueCapacity) {
+            this.logQueueCapacity = logQueueCapacity;
         }
     }
 }

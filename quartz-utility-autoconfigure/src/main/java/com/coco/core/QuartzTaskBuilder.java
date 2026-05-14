@@ -26,6 +26,8 @@ public class QuartzTaskBuilder {
     // 重试和超时配置
     private int retryTimes = 0;
     private long retryInterval = 1000;  // 默认 1 秒
+    private boolean exponentialBackoff = true;
+    private double backoffMultiplier = 1.5;
     private long timeout = 0;  // 默认不超时
     
     private QuartzTaskBuilder() {}
@@ -91,8 +93,9 @@ public class QuartzTaskBuilder {
         return this;
     }
     
-    public void misfireInstruction(int misfireInstruction) {
+    public QuartzTaskBuilder misfireInstruction(int misfireInstruction) {
         this.misfireInstruction = misfireInstruction;
+        return this;
     }
     
     /**
@@ -110,7 +113,23 @@ public class QuartzTaskBuilder {
         this.retryInterval = retryInterval;
         return this;
     }
-    
+
+    /**
+     * 设置是否启用指数退避重试策略
+     */
+    public QuartzTaskBuilder exponentialBackoff(boolean exponentialBackoff) {
+        this.exponentialBackoff = exponentialBackoff;
+        return this;
+    }
+
+    /**
+     * 设置指数退避乘数
+     */
+    public QuartzTaskBuilder backoffMultiplier(double backoffMultiplier) {
+        this.backoffMultiplier = backoffMultiplier;
+        return this;
+    }
+
     /**
      * 设置任务超时时间（毫秒），0 表示不限制
      */
@@ -172,6 +191,8 @@ public class QuartzTaskBuilder {
         dataMap.put(BaseAbstractQuartzJob.RETRY_INTERVAL_KEY, retryInterval);
         dataMap.put(BaseAbstractQuartzJob.TIMEOUT_KEY, timeout);
         dataMap.put(BaseAbstractQuartzJob.CURRENT_RETRY_KEY, 0);
+        dataMap.put(BaseAbstractQuartzJob.EXPONENTIAL_BACKOFF_KEY, exponentialBackoff);
+        dataMap.put(BaseAbstractQuartzJob.BACKOFF_MULTIPLIER_KEY, backoffMultiplier);
         
         QuartzComponent component = buildQuartzComponent();
         

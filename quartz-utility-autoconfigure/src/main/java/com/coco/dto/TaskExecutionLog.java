@@ -8,7 +8,7 @@ import java.sql.Timestamp;
 public class TaskExecutionLog {
     private String jobKey;
     private String triggerKey;
-    private byte execState;
+    private int execState;
     private String errorMessage;
     private String stackTrace;
     private Long executionTimeMs;
@@ -30,11 +30,11 @@ public class TaskExecutionLog {
         this.triggerKey = triggerKey;
     }
 
-    public byte getExecState() {
+    public int getExecState() {
         return execState;
     }
 
-    public void setExecState(byte execState) {
+    public void setExecState(int execState) {
         this.execState = execState;
     }
 

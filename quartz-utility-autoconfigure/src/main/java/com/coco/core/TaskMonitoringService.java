@@ -61,7 +61,7 @@ public class TaskMonitoringService {
                 TaskExecutionLog log = new TaskExecutionLog();
                 log.setJobKey(rs.getString("job_key"));
                 log.setTriggerKey(rs.getString("trigger_key"));
-                log.setExecState(rs.getByte("exec_state"));
+                log.setExecState(rs.getInt("exec_state"));
                 log.setErrorMessage(rs.getString("error_message"));
                 log.setStackTrace(rs.getString("stack_trace"));
                 log.setExecutionTimeMs(rs.getLong("execution_time_ms"));
@@ -83,7 +83,7 @@ public class TaskMonitoringService {
                 TaskExecutionLog log = new TaskExecutionLog();
                 log.setJobKey(rs.getString("job_key"));
                 log.setTriggerKey(rs.getString("trigger_key"));
-                log.setExecState(rs.getByte("exec_state"));
+                log.setExecState(rs.getInt("exec_state"));
                 log.setErrorMessage(rs.getString("error_message"));
                 log.setStackTrace(rs.getString("stack_trace"));
                 log.setExecutionTimeMs(rs.getLong("execution_time_ms"));
@@ -114,7 +114,7 @@ public class TaskMonitoringService {
                 TaskExecutionLog log = new TaskExecutionLog();
                 log.setJobKey(rs.getString("job_key"));
                 log.setTriggerKey(rs.getString("trigger_key"));
-                log.setExecState(rs.getByte("exec_state"));
+                log.setExecState(rs.getInt("exec_state"));
                 log.setErrorMessage(rs.getString("error_message"));
                 log.setStackTrace(rs.getString("stack_trace"));
                 log.setExecutionTimeMs(rs.getLong("execution_time_ms"));

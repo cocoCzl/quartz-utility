@@ -2,39 +2,53 @@ package com.coco.exception;
 
 public class QuartzUtilityException extends RuntimeException {
 
-    // 参数异常
-    public final static int PARAMETER_ABNORMAL = -1001;
+    private final ErrorCode errorCode;
 
-    private final int code;
-
-    public QuartzUtilityException(String message, int code) {
+    public QuartzUtilityException(String message, ErrorCode errorCode) {
         super(message);
-        this.code = code;
+        this.errorCode = errorCode;
     }
 
-    public QuartzUtilityException(String message, Throwable cause, int code) {
+    public QuartzUtilityException(String message, Throwable cause, ErrorCode errorCode) {
         super(message, cause);
-        this.code = code;
+        this.errorCode = errorCode;
     }
 
-    public QuartzUtilityException(Throwable cause, int code) {
+    public QuartzUtilityException(Throwable cause, ErrorCode errorCode) {
         super(cause);
-        this.code = code;
+        this.errorCode = errorCode;
     }
 
     public QuartzUtilityException(String message, Throwable cause, boolean enableSuppression,
-            boolean writableStackTrace, int code) {
+            boolean writableStackTrace, ErrorCode errorCode) {
         super(message, cause, enableSuppression, writableStackTrace);
-        this.code = code;
+        this.errorCode = errorCode;
+    }
+
+    public ErrorCode getErrorCode() {
+        return errorCode;
     }
 
     /**
-     * 获取错误码
-     *
-     * @return 错误码
+     * @deprecated Use {@link #getErrorCode()} instead
      */
+    @Deprecated
     public int getCode() {
-        return code;
+        return errorCode.getCode();
     }
 
+    public enum ErrorCode {
+        PARAMETER_ABNORMAL(-1001),
+        INVALID_EXEC_STATE(-2001);
+
+        private final int code;
+
+        ErrorCode(int code) {
+            this.code = code;
+        }
+
+        public int getCode() {
+            return code;
+        }
+    }
 }
