@@ -237,6 +237,10 @@ public class SchedulerCore {
         return TriggerKey.triggerKey(QuartzSign.TRIGGER_KEY_PREFIX, QuartzSign.GROUP);
     }
 
+    public static TriggerKey getDefaultTriggerKey(Class<? extends Job> jobClass) {
+        return getTriggerKey(jobClass.getName());
+    }
+
     /**
      * 通过任务名称获取JobKey，使用默认的组名和前缀加上传入的任务名称来构建JobKey。
      *
@@ -260,6 +264,10 @@ public class SchedulerCore {
 
     public static JobKey getDefaultJobKey() {
         return JobKey.jobKey(QuartzSign.JOB_KEY_PREFIX, QuartzSign.GROUP);
+    }
+
+    public static JobKey getDefaultJobKey(Class<? extends Job> jobClass) {
+        return getJobKey(jobClass.getName());
     }
 
 }

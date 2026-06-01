@@ -5,12 +5,11 @@ import java.util.ArrayList;
 import org.quartz.Job;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.aop.framework.AopProxyUtils;
 import org.springframework.boot.context.event.ApplicationReadyEvent;
 import org.springframework.context.ApplicationContext;
 import org.springframework.context.event.EventListener;
 import org.springframework.core.annotation.AnnotationUtils;
-import org.springframework.stereotype.Component;
 
 import java.util.List;
 import java.util.Map;
@@ -20,18 +19,20 @@ import java.util.concurrent.CopyOnWriteArrayList;
  * Quartz 任务注解处理器
  * 自动扫描并注册所有带有 @QuartzJob 注解的任务
  */
-@Component
 public class QuartzJobAnnotationProcessor {
 
     private static final Logger logger = LoggerFactory.getLogger(QuartzJobAnnotationProcessor.class);
 
-    @Autowired
-    private ApplicationContext applicationContext;
+    private final ApplicationContext applicationContext;
 
-    @Autowired
-    private CoQuartzScheduler scheduler;
+    private final CoQuartzScheduler scheduler;
 
     private final List<QuartzJobDefinition> jobDefinitions = new CopyOnWriteArrayList<>();
+
+    public QuartzJobAnnotationProcessor(ApplicationContext applicationContext, CoQuartzScheduler scheduler) {
+        this.applicationContext = applicationContext;
+        this.scheduler = scheduler;
+    }
 
     /**
      * 应用启动完成后自动注册任务
@@ -45,7 +46,7 @@ public class QuartzJobAnnotationProcessor {
 
         for (Map.Entry<String, Object> entry : beans.entrySet()) {
             Object bean = entry.getValue();
-            Class<?> beanClass = bean.getClass();
+            Class<?> beanClass = AopProxyUtils.ultimateTargetClass(bean);
 
             // 检查是否实现了 Job 接口
             if (!Job.class.isAssignableFrom(beanClass)) {

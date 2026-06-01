@@ -142,6 +142,7 @@ public class QuartzTaskBuilder {
      * 构建任务调度配置
      */
     public QuartzComponent buildQuartzComponent() {
+        validate();
         QuartzComponent.Builder builder = new QuartzComponent.Builder()
                 .setDescription(description != null ? description : "Task: " + jobName)
                 .setShouldRecover(shouldRecover)
@@ -150,18 +151,8 @@ public class QuartzTaskBuilder {
         if (useCron && cronExpression != null) {
             builder.setCronExpression(cronExpression);
         } else {
+            builder.setTimeEnum(com.coco.enums.TimeEnum.SECONDS);
             builder.setTimeInterval(intervalInSeconds);
-            // 根据时间间隔选择合适的时间单位
-            if (intervalInSeconds >= 3600) {
-                builder.setTimeEnum(com.coco.enums.TimeEnum.HOURS);
-                builder.setTimeInterval(intervalInSeconds / 3600);
-            } else if (intervalInSeconds >= 60) {
-                builder.setTimeEnum(com.coco.enums.TimeEnum.MINUTES);
-                builder.setTimeInterval(intervalInSeconds / 60);
-            } else {
-                builder.setTimeEnum(com.coco.enums.TimeEnum.SECONDS);
-                builder.setTimeInterval(intervalInSeconds);
-            }
         }
         
         if (misfireInstruction != -1) {
@@ -175,6 +166,7 @@ public class QuartzTaskBuilder {
      * 调度任务
      */
     public void schedule(CoQuartzScheduler scheduler) throws SchedulerException {
+        validate();
         JobKey jobKey = scheduler.getJobKey(jobName, jobGroup);
         TriggerKey triggerKey = scheduler.getTriggerKey(triggerName != null ? triggerName : jobName, triggerGroup);
         
@@ -207,7 +199,44 @@ public class QuartzTaskBuilder {
      * 立即执行一次任务
      */
     public void executeNow(CoQuartzScheduler scheduler) throws SchedulerException {
+        if (jobName == null || jobName.isBlank()) {
+            throw new IllegalArgumentException("jobName must not be blank");
+        }
         JobKey jobKey = scheduler.getJobKey(jobName, jobGroup);
         scheduler.scheduler().triggerJob(jobKey);
+    }
+
+    private void validate() {
+        if (jobClass == null) {
+            throw new IllegalArgumentException("jobClass must not be null");
+        }
+        if (jobName == null || jobName.isBlank()) {
+            throw new IllegalArgumentException("jobName must not be blank");
+        }
+        if (jobGroup == null || jobGroup.isBlank()) {
+            throw new IllegalArgumentException("jobGroup must not be blank");
+        }
+        if (triggerGroup == null || triggerGroup.isBlank()) {
+            throw new IllegalArgumentException("triggerGroup must not be blank");
+        }
+        if (useCron) {
+            if (cronExpression == null || cronExpression.isBlank()) {
+                throw new IllegalArgumentException("cronExpression must not be blank");
+            }
+        } else if (intervalInSeconds <= 0) {
+            throw new IllegalArgumentException("intervalInSeconds must be greater than 0");
+        }
+        if (retryTimes < 0) {
+            throw new IllegalArgumentException("retryTimes must not be negative");
+        }
+        if (retryInterval < 0) {
+            throw new IllegalArgumentException("retryInterval must not be negative");
+        }
+        if (timeout < 0) {
+            throw new IllegalArgumentException("timeout must not be negative");
+        }
+        if (backoffMultiplier <= 0) {
+            throw new IllegalArgumentException("backoffMultiplier must be greater than 0");
+        }
     }
 }

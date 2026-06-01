@@ -34,52 +34,61 @@ Quartz-Utility 是一个专为 Spring Boot 项目设计的 Quartz 定时任务�
 
 ### 1. 添加依赖
 
+如果是本地使用，先在本项目执行：
+
+```bash
+mvn clean install
+```
+
 ```xml
 <dependency>
   <groupId>com.coco</groupId>
   <artifactId>quartz-utility-starter</artifactId>
-  <version>1.0-SNAPSHOT</version>
+  <version>1.1.0-SNAPSHOT</version>
 </dependency>
 ```
 
 ### 2. 创建数据库表
 
+如果你启用执行日志，需要在业务项目的数据源中创建日志表。完整脚本也放在
+`quartz-utility-autoconfigure/src/main/resources/schema-quartz-task-log.sql`。
+
 #### MySQL
 ```sql
-DROP TABLE IF EXISTS quartz_task_log;
-CREATE TABLE quartz_task_log (
-  id INT PRIMARY KEY AUTO_INCREMENT,
-  job_key VARCHAR(64) NOT NULL COMMENT 'job标识',
-  trigger_key VARCHAR(64) NOT NULL COMMENT 'trigger标识',
-  exec_state TINYINT NOT NULL COMMENT '0 失败, 1 成功',
-  error_message TEXT COMMENT '错误信息',
-  stack_trace TEXT COMMENT '错误堆栈信息',
-  execution_time_ms BIGINT COMMENT '任务执行时间(毫秒)',
-  execute_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '执行时间'
-);
-
-CREATE INDEX idx_job_key ON quartz_task_log(job_key);
-CREATE INDEX idx_trigger_key ON quartz_task_log(trigger_key);
-CREATE INDEX idx_execute_time ON quartz_task_log(execute_time);
+CREATE TABLE IF NOT EXISTS quartz_task_log (
+  id BIGINT AUTO_INCREMENT PRIMARY KEY,
+  job_key VARCHAR(200) NOT NULL,
+  trigger_key VARCHAR(200) NOT NULL,
+  exec_state INT NOT NULL COMMENT '0=FAIL, 1=SUCCESS',
+  error_message TEXT,
+  stack_trace TEXT,
+  execution_time_ms BIGINT,
+  execute_time TIMESTAMP NOT NULL,
+  INDEX idx_job_key (job_key),
+  INDEX idx_trigger_key (trigger_key),
+  INDEX idx_execute_time (execute_time),
+  INDEX idx_exec_state (exec_state),
+  INDEX idx_job_execute_time (job_key, execute_time)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='Quartz task execution log';
 ```
 
 #### PostgreSQL
 ```sql
-DROP TABLE IF EXISTS quartz_task_log;
-CREATE TABLE quartz_task_log (
-  id SERIAL PRIMARY KEY,
-  job_key VARCHAR(64) NOT NULL,
-  trigger_key VARCHAR(64) NOT NULL,
-  exec_state SMALLINT NOT NULL,
+CREATE TABLE IF NOT EXISTS quartz_task_log (
+  id BIGSERIAL PRIMARY KEY,
+  job_key VARCHAR(200) NOT NULL,
+  trigger_key VARCHAR(200) NOT NULL,
+  exec_state INT NOT NULL,
   error_message TEXT,
   stack_trace TEXT,
   execution_time_ms BIGINT,
-  execute_time TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP
+  execute_time TIMESTAMP NOT NULL
 );
-
-CREATE INDEX idx_job_key ON quartz_task_log(job_key);
-CREATE INDEX idx_trigger_key ON quartz_task_log(trigger_key);
-CREATE INDEX idx_execute_time ON quartz_task_log(execute_time);
+CREATE INDEX IF NOT EXISTS idx_quartz_log_job_key ON quartz_task_log(job_key);
+CREATE INDEX IF NOT EXISTS idx_quartz_log_trigger_key ON quartz_task_log(trigger_key);
+CREATE INDEX IF NOT EXISTS idx_quartz_log_execute_time ON quartz_task_log(execute_time);
+CREATE INDEX IF NOT EXISTS idx_quartz_log_exec_state ON quartz_task_log(exec_state);
+CREATE INDEX IF NOT EXISTS idx_quartz_log_job_execute_time ON quartz_task_log(job_key, execute_time);
 ```
 
 ### 3. 配置文件（可选）
@@ -95,9 +104,31 @@ quartz-utility:
     slow-task-threshold-ms: 5000
   async:
     enabled: true
-    core-pool-size: 2
-    max-pool-size: 5
-    queue-capacity: 100
+    log-queue-capacity: 1000
+    log-batch-size: 100
+    log-flush-interval-ms: 1000
+    shutdown-flush-timeout-ms: 10000
+  annotation:
+    enabled: true
+```
+
+如果项目暂时没有数据源或没有创建日志表，可以先关闭日志：
+
+```yaml
+quartz-utility:
+  log:
+    enabled: false
+  async:
+    enabled: false
+```
+
+Quartz 本身仍然使用 Spring Boot 的标准配置，例如：
+
+```yaml
+spring:
+  quartz:
+    job-store-type: memory
+    auto-startup: true
 ```
 
 ### 4. 创建任务
@@ -158,6 +189,57 @@ public class TaskScheduler {
     }
 }
 ```
+
+#### 方式三：管理服务（适合后台/运营接口）
+
+`quartz-utility-starter` 会自动注册这些服务，业务项目直接注入即可：
+
+```java
+@Service
+public class JobAdminFacade {
+
+    private final TaskAdminService taskAdminService;
+    private final TaskQueryService taskQueryService;
+    private final TaskLogService taskLogService;
+
+    public JobAdminFacade(TaskAdminService taskAdminService,
+                          TaskQueryService taskQueryService,
+                          TaskLogService taskLogService) {
+        this.taskAdminService = taskAdminService;
+        this.taskQueryService = taskQueryService;
+        this.taskLogService = taskLogService;
+    }
+
+    public void createJob() throws SchedulerException {
+        TaskScheduleRequest request = new TaskScheduleRequest();
+        request.setJobClass(MyJob.class);
+        request.setJobName("managedJob");
+        request.setJobGroup("ops");
+        request.setCronExpression("0 0/5 * * * ?");
+        request.setRetryTimes(2);
+        request.setTimeout(10000);
+        taskAdminService.schedule(request);
+    }
+
+    public List<TaskInfo> jobs() throws SchedulerException {
+        return taskQueryService.listJobs();
+    }
+
+    public PageResult<TaskExecutionLog> logs() {
+        TaskLogQuery query = new TaskLogQuery();
+        query.setJobKey("ops.managedJob");
+        query.setPage(1);
+        query.setSize(20);
+        return taskLogService.pageLogs(query);
+    }
+}
+```
+
+常用服务：
+
+- `TaskAdminService`: `schedule`、`pause`、`resume`、`delete`、`triggerNow`、`exists`、`rescheduleCron`、`rescheduleInterval`
+- `TaskQueryService`: `listJobs`、`getJobDetail`、`getRunningJobs`、`getNextFireTime`、`getPreviousFireTime`、`getTriggerState`
+- `TaskLogService`: `pageLogs`、`latestLogs`、`failedLogs`、`statistics`、`cleanup`
 
 ---
 

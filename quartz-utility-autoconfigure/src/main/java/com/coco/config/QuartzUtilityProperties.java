@@ -28,6 +28,11 @@ public class QuartzUtilityProperties {
      */
     private AsyncConfig async = new AsyncConfig();
 
+    /**
+     * 注解扫描配置
+     */
+    private AnnotationConfig annotation = new AnnotationConfig();
+
     @PostConstruct
     public void init() {
         logger.info(
@@ -57,6 +62,14 @@ public class QuartzUtilityProperties {
 
     public void setAsync(AsyncConfig async) {
         this.async = async;
+    }
+
+    public AnnotationConfig getAnnotation() {
+        return annotation;
+    }
+
+    public void setAnnotation(AnnotationConfig annotation) {
+        this.annotation = annotation;
     }
 
     /**
@@ -173,6 +186,11 @@ public class QuartzUtilityProperties {
         private boolean enabled = true;
 
         /**
+         * 是否创建可注入的异步执行器 Bean
+         */
+        private boolean executorEnabled = false;
+
+        /**
          * 核心线程池大小
          */
         private int corePoolSize = 2;
@@ -197,12 +215,35 @@ public class QuartzUtilityProperties {
          */
         private int logQueueCapacity = 1000;
 
+        /**
+         * 日志批量写入大小
+         */
+        private int logBatchSize = 100;
+
+        /**
+         * 日志刷新间隔（毫秒）
+         */
+        private long logFlushIntervalMs = 1000;
+
+        /**
+         * 应用关闭时最多等待日志刷新的时间（毫秒）
+         */
+        private long shutdownFlushTimeoutMs = 10000;
+
         public boolean isEnabled() {
             return enabled;
         }
 
         public void setEnabled(boolean enabled) {
             this.enabled = enabled;
+        }
+
+        public boolean isExecutorEnabled() {
+            return executorEnabled;
+        }
+
+        public void setExecutorEnabled(boolean executorEnabled) {
+            this.executorEnabled = executorEnabled;
         }
 
         public int getCorePoolSize() {
@@ -243,6 +284,49 @@ public class QuartzUtilityProperties {
 
         public void setLogQueueCapacity(int logQueueCapacity) {
             this.logQueueCapacity = logQueueCapacity;
+        }
+
+        public int getLogBatchSize() {
+            return logBatchSize;
+        }
+
+        public void setLogBatchSize(int logBatchSize) {
+            this.logBatchSize = logBatchSize;
+        }
+
+        public long getLogFlushIntervalMs() {
+            return logFlushIntervalMs;
+        }
+
+        public void setLogFlushIntervalMs(long logFlushIntervalMs) {
+            this.logFlushIntervalMs = logFlushIntervalMs;
+        }
+
+        public long getShutdownFlushTimeoutMs() {
+            return shutdownFlushTimeoutMs;
+        }
+
+        public void setShutdownFlushTimeoutMs(long shutdownFlushTimeoutMs) {
+            this.shutdownFlushTimeoutMs = shutdownFlushTimeoutMs;
+        }
+    }
+
+    /**
+     * 注解自动注册配置类
+     */
+    public static class AnnotationConfig {
+
+        /**
+         * 是否自动注册 @QuartzJob 任务
+         */
+        private boolean enabled = true;
+
+        public boolean isEnabled() {
+            return enabled;
+        }
+
+        public void setEnabled(boolean enabled) {
+            this.enabled = enabled;
         }
     }
 }

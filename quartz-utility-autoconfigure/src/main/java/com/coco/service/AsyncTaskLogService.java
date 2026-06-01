@@ -5,13 +5,8 @@ import com.coco.core.QuartzSign;
 import jakarta.annotation.PreDestroy;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.beans.factory.annotation.Qualifier;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.core.BatchPreparedStatementSetter;
-import org.springframework.scheduling.annotation.Scheduled;
-import org.springframework.stereotype.Service;
 
 import java.sql.PreparedStatement;
 import java.sql.SQLException;
@@ -20,39 +15,53 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.LinkedBlockingQueue;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicLong;
+import java.util.concurrent.locks.ReentrantLock;
 
 /**
  * 异步任务日志服务（优化版）
  * 使用 BlockingQueue 缓存日志，定时批量写入，大幅提升性能
  */
-@Service
-@ConditionalOnProperty(prefix = "quartz-utility.async", name = "enabled", havingValue = "true", matchIfMissing = true)
 public class AsyncTaskLogService {
 
     private static final Logger logger = LoggerFactory.getLogger(AsyncTaskLogService.class);
 
-    @Autowired
-    @Qualifier("quartzJdbcTemplate")
-    private JdbcTemplate quartzJdbcTemplate;
-
-    @Autowired
-    private QuartzUtilityProperties properties;
+    private final JdbcTemplate quartzJdbcTemplate;
+    private final QuartzUtilityProperties properties;
 
     // 日志队列
     private final BlockingQueue<TaskLogEntry> logQueue;
 
-    // 批量写入大小（默认 100）
-    private static final int BATCH_SIZE = 100;
+    private final int batchSize;
+    private final ScheduledExecutorService flushExecutor;
+    private final ReentrantLock flushLock = new ReentrantLock();
+    private volatile boolean shuttingDown = false;
 
     // 监控指标
     private final AtomicLong totalLogsReceived = new AtomicLong(0);
     private final AtomicLong totalLogsWritten = new AtomicLong(0);
     private final AtomicLong totalBatchesWritten = new AtomicLong(0);
+    private final AtomicLong totalLogsDropped = new AtomicLong(0);
+    private final AtomicLong totalFlushFailures = new AtomicLong(0);
 
-    public AsyncTaskLogService(QuartzUtilityProperties properties) {
+    public AsyncTaskLogService(JdbcTemplate quartzJdbcTemplate, QuartzUtilityProperties properties) {
+        this.quartzJdbcTemplate = quartzJdbcTemplate;
+        this.properties = properties;
         this.logQueue = new LinkedBlockingQueue<>(properties.getAsync().getLogQueueCapacity());
-        logger.info("AsyncTaskLogService initialized with queue capacity: {}", properties.getAsync().getLogQueueCapacity());
+        this.batchSize = Math.max(1, properties.getAsync().getLogBatchSize());
+        this.flushExecutor = Executors.newSingleThreadScheduledExecutor(r -> {
+            Thread thread = new Thread(r, "quartz-log-flusher");
+            thread.setDaemon(true);
+            return thread;
+        });
+        long flushIntervalMs = Math.max(100, properties.getAsync().getLogFlushIntervalMs());
+        this.flushExecutor.scheduleWithFixedDelay(this::flushLogsSafely, flushIntervalMs,
+                flushIntervalMs, TimeUnit.MILLISECONDS);
+        logger.info("AsyncTaskLogService initialized with queueCapacity={}, batchSize={}, flushIntervalMs={}",
+                properties.getAsync().getLogQueueCapacity(), batchSize, flushIntervalMs);
     }
 
     /**
@@ -67,6 +76,12 @@ public class AsyncTaskLogService {
      */
     public void logTaskExecutionAsync(String jobKey, String triggerKey, int execState,
             String errorMessage, String stackTrace, long executionTimeMs) {
+        if (shuttingDown) {
+            totalLogsDropped.incrementAndGet();
+            logger.warn("Task log dropped because AsyncTaskLogService is shutting down: jobKey={}, triggerKey={}",
+                    jobKey, triggerKey);
+            return;
+        }
         
         TaskLogEntry entry = new TaskLogEntry(jobKey, triggerKey, execState, 
                 errorMessage, stackTrace, executionTimeMs);
@@ -79,7 +94,14 @@ public class AsyncTaskLogService {
                 // 队列已满，立即执行批量写入，然后重新添加
                 logger.warn("Log queue is full (size={}), forcing immediate flush", logQueue.size());
                 flushLogsImmediately();
-                logQueue.offer(entry);
+                added = logQueue.offer(entry);
+            }
+
+            if (!added) {
+                totalLogsDropped.incrementAndGet();
+                logger.error("Task log dropped because queue remains full: jobKey={}, triggerKey={}",
+                        jobKey, triggerKey);
+                return;
             }
 
             totalLogsReceived.incrementAndGet();
@@ -94,32 +116,35 @@ public class AsyncTaskLogService {
     }
 
     /**
-     * 定时批量写入日志（每秒执行一次）
-     */
-    @Scheduled(fixedDelay = 1000, initialDelay = 1000)
-    public void flushLogsScheduled() {
-        if (logQueue.isEmpty()) {
-            return;
-        }
-
-        flushLogsInternal();
-    }
-
-    /**
      * 立即执行批量写入
      */
     public void flushLogsImmediately() {
-        flushLogsInternal();
+        flushLogsSafely();
     }
 
     /**
      * 内部批量写入实现
      */
+    private void flushLogsSafely() {
+        if (logQueue.isEmpty() || !flushLock.tryLock()) {
+            return;
+        }
+
+        try {
+            flushLogsInternal();
+        } catch (Exception e) {
+            totalFlushFailures.incrementAndGet();
+            logger.error("Unexpected task log flush failure: {}", e.getMessage(), e);
+        } finally {
+            flushLock.unlock();
+        }
+    }
+
     private void flushLogsInternal() {
-        List<TaskLogEntry> batch = new ArrayList<>(BATCH_SIZE);
+        List<TaskLogEntry> batch = new ArrayList<>(batchSize);
         
         // 从队列中批量取出日志
-        logQueue.drainTo(batch, BATCH_SIZE);
+        logQueue.drainTo(batch, batchSize);
         
         if (batch.isEmpty()) {
             return;
@@ -136,11 +161,13 @@ public class AsyncTaskLogService {
                     batch.size(), logQueue.size());
 
         } catch (Exception e) {
+            totalFlushFailures.incrementAndGet();
             logger.error("Failed to flush {} task logs: {}", batch.size(), e.getMessage(), e);
 
             for (TaskLogEntry entry : batch) {
                 boolean reOffered = logQueue.offer(entry);
                 if (!reOffered) {
+                    totalLogsDropped.incrementAndGet();
                     logger.error("Log entry dropped due to queue full: jobKey={}, triggerKey={}",
                             entry.getJobKey(), entry.getTriggerKey());
                 }
@@ -183,15 +210,25 @@ public class AsyncTaskLogService {
      */
     @PreDestroy
     public void shutdown() {
+        shuttingDown = true;
         logger.info("Shutting down AsyncTaskLogService, flushing remaining {} logs", logQueue.size());
+        flushExecutor.shutdownNow();
         
-        // 循环刷新直到队列为空
-        while (!logQueue.isEmpty()) {
-            flushLogsInternal();
+        long deadline = System.currentTimeMillis() + Math.max(0, properties.getAsync().getShutdownFlushTimeoutMs());
+        while (!logQueue.isEmpty() && System.currentTimeMillis() <= deadline) {
+            flushLogsSafely();
         }
 
-        logger.info("AsyncTaskLogService shutdown complete. Total logs received: {}, written: {}, batches: {}",
-                totalLogsReceived.get(), totalLogsWritten.get(), totalBatchesWritten.get());
+        int remaining = logQueue.size();
+        if (remaining > 0) {
+            totalLogsDropped.addAndGet(remaining);
+            logQueue.clear();
+            logger.error("AsyncTaskLogService shutdown timed out, dropped {} remaining logs", remaining);
+        }
+
+        logger.info("AsyncTaskLogService shutdown complete. Total logs received: {}, written: {}, batches: {}, dropped: {}, flushFailures: {}",
+                totalLogsReceived.get(), totalLogsWritten.get(), totalBatchesWritten.get(),
+                totalLogsDropped.get(), totalFlushFailures.get());
     }
 
     /**
@@ -209,7 +246,9 @@ public class AsyncTaskLogService {
                 totalLogsReceived.get(),
                 totalLogsWritten.get(),
                 totalBatchesWritten.get(),
-                logQueue.size()
+                logQueue.size(),
+                totalLogsDropped.get(),
+                totalFlushFailures.get()
         );
     }
 
@@ -221,13 +260,18 @@ public class AsyncTaskLogService {
         private final long totalLogsWritten;
         private final long totalBatchesWritten;
         private final int currentQueueSize;
+        private final long totalLogsDropped;
+        private final long totalFlushFailures;
 
         public MonitoringMetrics(long totalLogsReceived, long totalLogsWritten, 
-                                long totalBatchesWritten, int currentQueueSize) {
+                                long totalBatchesWritten, int currentQueueSize,
+                                long totalLogsDropped, long totalFlushFailures) {
             this.totalLogsReceived = totalLogsReceived;
             this.totalLogsWritten = totalLogsWritten;
             this.totalBatchesWritten = totalBatchesWritten;
             this.currentQueueSize = currentQueueSize;
+            this.totalLogsDropped = totalLogsDropped;
+            this.totalFlushFailures = totalFlushFailures;
         }
 
         public long getTotalLogsReceived() {
@@ -244,6 +288,14 @@ public class AsyncTaskLogService {
 
         public int getCurrentQueueSize() {
             return currentQueueSize;
+        }
+
+        public long getTotalLogsDropped() {
+            return totalLogsDropped;
+        }
+
+        public long getTotalFlushFailures() {
+            return totalFlushFailures;
         }
 
         public double getAverageBatchSize() {

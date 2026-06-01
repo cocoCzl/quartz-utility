@@ -8,6 +8,7 @@ import org.quartz.impl.matchers.GroupMatcher;
 import java.util.ArrayList;
 import java.util.Date;
 import java.util.List;
+import java.util.Objects;
 import java.util.Set;
 
 /**
@@ -38,8 +39,8 @@ public record CoQuartzScheduler(Scheduler scheduler) {
      */
     public void scheduleSimpleIntervalJob(Class<? extends Job> jobClass, JobDataMap jobDataMap,
             QuartzComponent quartzComponent) throws SchedulerException {
-        JobKey jobKey = SchedulerCore.getDefaultJobKey();
-        TriggerKey triggerKey = SchedulerCore.getDefaultTriggerKey();
+        JobKey jobKey = SchedulerCore.getDefaultJobKey(jobClass);
+        TriggerKey triggerKey = SchedulerCore.getDefaultTriggerKey(jobClass);
         scheduleSimpleIntervalJob(jobClass, jobKey, triggerKey, jobDataMap, null, quartzComponent);
     }
 
@@ -52,8 +53,8 @@ public record CoQuartzScheduler(Scheduler scheduler) {
      */
     public void scheduleSimpleIntervalJob(Class<? extends Job> jobClass,
             QuartzComponent quartzComponent) throws SchedulerException {
-        JobKey jobKey = SchedulerCore.getDefaultJobKey();
-        TriggerKey triggerKey = SchedulerCore.getDefaultTriggerKey();
+        JobKey jobKey = SchedulerCore.getDefaultJobKey(jobClass);
+        TriggerKey triggerKey = SchedulerCore.getDefaultTriggerKey(jobClass);
         scheduleSimpleIntervalJob(jobClass, jobKey, triggerKey, null, null, quartzComponent);
     }
 
@@ -82,32 +83,13 @@ public record CoQuartzScheduler(Scheduler scheduler) {
             return;
         }
 
-        Trigger existingTrigger = scheduler.getTrigger(triggerKey);
-
-        // 检查是否存在已调度的任务
-        if (existingTrigger != null) {
-            // 获取执行间隔时间（单位毫秒）
-            int currentInterval = (int) ((SimpleTrigger) existingTrigger).getRepeatInterval();
-            int newInterval = getInterval(quartzComponent);
-            
-            // 如果间隔相同，任务已存在且配置匹配，无需重新调度
-            if (currentInterval == newInterval) {
-                return;
-            }
-            
-            // 如果间隔不同，删除现有任务以便重新调度
-            scheduler.pauseTrigger(triggerKey);
-            scheduler.unscheduleJob(triggerKey);
-            scheduler.deleteJob(jobDetail.getKey());
-        }
-
         // 将任务和触发器注册到Scheduler中
         Trigger trigger = createSimpleTrigger(triggerKey, quartzComponent);
         
         if (jobListener != null) {
             scheduler.getListenerManager().addJobListener(jobListener);
         }
-        scheduler.scheduleJob(jobDetail, trigger);
+        scheduleOrUpdateJob(jobDetail, trigger);
     }
 
     /**
@@ -133,30 +115,13 @@ public record CoQuartzScheduler(Scheduler scheduler) {
         JobDetail jobDetail = SchedulerCore.getJobDetail(jobClass, jobKey, jobDataMap,
                 quartzComponent);
 
-        Trigger existingTrigger = scheduler.getTrigger(triggerKey);
-        if (existingTrigger != null) {
-            // 检查 Cron 表达式是否相同
-            if (existingTrigger instanceof CronTrigger) {
-                String existingCron = ((CronTrigger) existingTrigger).getCronExpression();
-                if (existingCron.equals(quartzComponent.getCronExpression())) {
-                    // Cron 表达式相同，无需重新调度
-                    return;
-                }
-            }
-            
-            // Cron 表达式不同，删除现有任务
-            scheduler.pauseTrigger(triggerKey);
-            scheduler.unscheduleJob(triggerKey);
-            scheduler.deleteJob(jobDetail.getKey());
-        }
-
         // 创建新的 Cron 触发器
         Trigger trigger = SchedulerCore.getCronTrigger(triggerKey, quartzComponent.getCronExpression());
 
         if (jobListener != null) {
             scheduler.getListenerManager().addJobListener(jobListener);
         }
-        scheduler.scheduleJob(jobDetail, trigger);
+        scheduleOrUpdateJob(jobDetail, trigger);
     }
 
     /**
@@ -169,8 +134,8 @@ public record CoQuartzScheduler(Scheduler scheduler) {
      */
     public void scheduleCronJob(Class<? extends Job> jobClass, String cronExpression,
             QuartzComponent quartzComponent) throws SchedulerException {
-        JobKey jobKey = SchedulerCore.getDefaultJobKey();
-        TriggerKey triggerKey = SchedulerCore.getDefaultTriggerKey();
+        JobKey jobKey = SchedulerCore.getDefaultJobKey(jobClass);
+        TriggerKey triggerKey = SchedulerCore.getDefaultTriggerKey(jobClass);
 
         // 在 QuartzComponent 中设置 Cron 表达式
         QuartzComponent updatedComponent = new Builder()
@@ -481,6 +446,61 @@ public record CoQuartzScheduler(Scheduler scheduler) {
             default -> throw new QuartzUtilityException("The interval type is abnormal",
                     QuartzUtilityException.ErrorCode.PARAMETER_ABNORMAL);
         };
+    }
+
+    private void scheduleOrUpdateJob(JobDetail jobDetail, Trigger trigger) throws SchedulerException {
+        Trigger targetTrigger = trigger.getTriggerBuilder().forJob(jobDetail).build();
+        Trigger existingTrigger = scheduler.getTrigger(trigger.getKey());
+
+        if (existingTrigger == null) {
+            if (scheduler.checkExists(jobDetail.getKey())) {
+                scheduler.addJob(jobDetail, true, true);
+                scheduler.scheduleJob(targetTrigger);
+            } else {
+                scheduler.scheduleJob(jobDetail, targetTrigger);
+            }
+            return;
+        }
+
+        JobDetail existingJobDetail = scheduler.getJobDetail(jobDetail.getKey());
+        if (isSameJobDetail(existingJobDetail, jobDetail) && isSameTrigger(existingTrigger, targetTrigger)) {
+            return;
+        }
+
+        scheduler.addJob(jobDetail, true, true);
+        scheduler.rescheduleJob(targetTrigger.getKey(), targetTrigger);
+    }
+
+    private boolean isSameJobDetail(JobDetail existing, JobDetail target) {
+        if (existing == null) {
+            return false;
+        }
+        return Objects.equals(existing.getJobClass(), target.getJobClass())
+                && Objects.equals(existing.getDescription(), target.getDescription())
+                && existing.requestsRecovery() == target.requestsRecovery()
+                && existing.isDurable() == target.isDurable()
+                && Objects.equals(existing.getJobDataMap(), target.getJobDataMap());
+    }
+
+    private boolean isSameTrigger(Trigger existing, Trigger target) {
+        if (!Objects.equals(existing.getDescription(), target.getDescription())
+                || !Objects.equals(existing.getCalendarName(), target.getCalendarName())
+                || existing.getMisfireInstruction() != target.getMisfireInstruction()
+                || !Objects.equals(existing.getJobKey(), target.getJobKey())) {
+            return false;
+        }
+
+        if (existing instanceof SimpleTrigger existingSimple && target instanceof SimpleTrigger targetSimple) {
+            return existingSimple.getRepeatInterval() == targetSimple.getRepeatInterval()
+                    && existingSimple.getRepeatCount() == targetSimple.getRepeatCount();
+        }
+
+        if (existing instanceof CronTrigger existingCron && target instanceof CronTrigger targetCron) {
+            return Objects.equals(existingCron.getCronExpression(), targetCron.getCronExpression())
+                    && Objects.equals(existingCron.getTimeZone(), targetCron.getTimeZone());
+        }
+
+        return existing.getClass().equals(target.getClass());
     }
 
     /**

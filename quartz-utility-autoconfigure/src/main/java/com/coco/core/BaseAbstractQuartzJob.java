@@ -39,7 +39,7 @@ public abstract class BaseAbstractQuartzJob implements Job {
     public static final String EXPONENTIAL_BACKOFF_KEY = "exponentialBackoff";
     public static final String BACKOFF_MULTIPLIER_KEY = "backoffMultiplier";
 
-    @Autowired
+    @Autowired(required = false)
     @Qualifier("quartzJdbcTemplate")
     private JdbcTemplate quartzJdbcTemplate;
 
@@ -49,7 +49,7 @@ public abstract class BaseAbstractQuartzJob implements Job {
     @Autowired(required = false)
     private TaskAlertService taskAlertService;
 
-    @Autowired
+    @Autowired(required = false)
     private QuartzUtilityProperties properties;
 
     /**
@@ -102,13 +102,13 @@ public abstract class BaseAbstractQuartzJob implements Job {
             
             // 获取重试次数
             JobDataMap dataMap = context.getJobDetail().getJobDataMap();
-            retryCount = dataMap.getInt(CURRENT_RETRY_KEY);
+            retryCount = dataMap.containsKey(CURRENT_RETRY_KEY) ? dataMap.getInt(CURRENT_RETRY_KEY) : 0;
 
             logger.error("Task execution failed: jobKey={}, triggerKey={}, retryCount={}, error={}",
                     jobKey, triggerKey, retryCount, e.getMessage(), e);
 
             // 发送失败告警
-            if (taskAlertService != null && properties.getMonitoring().isAlertOnFailure()) {
+            if (taskAlertService != null && getProperties().getMonitoring().isAlertOnFailure()) {
                 taskAlertService.alertOnFailure(jobKey, triggerKey, errorMessage, stackTrace);
             }
 
@@ -122,22 +122,29 @@ public abstract class BaseAbstractQuartzJob implements Job {
                     execState == LogTaskExecStateEnum.EXEC_SUCCESS.getCode() ? "SUCCESS" : "FAILED");
 
             // 慢任务检测
-            if (properties.getMonitoring().isEnabled() &&
-                    executionTime > properties.getMonitoring().getSlowTaskThresholdMs()) {
+            if (getProperties().getMonitoring().isEnabled() &&
+                    executionTime > getProperties().getMonitoring().getSlowTaskThresholdMs()) {
                 logger.warn("Slow task detected: jobKey={}, triggerKey={}, executionTime={}ms",
                         jobKey, triggerKey, executionTime);
                 if (taskAlertService != null) {
                     taskAlertService.alertOnSlowTask(jobKey, triggerKey, executionTime,
-                            properties.getMonitoring().getSlowTaskThresholdMs());
+                            getProperties().getMonitoring().getSlowTaskThresholdMs());
                 }
             }
 
             // 记录详细日志（异步或同步）
-            if (asyncTaskLogService != null && properties.getAsync().isEnabled()) {
-                asyncTaskLogService.logTaskExecutionAsync(jobKey, triggerKey, execState,
-                        errorMessage, stackTrace, executionTime);
-            } else {
-                insertDetailedTaskLog(jobKey, triggerKey, execState, errorMessage, stackTrace, executionTime);
+            if (getProperties().getLog().isEnabled()) {
+                try {
+                    if (asyncTaskLogService != null && getProperties().getAsync().isEnabled()) {
+                        asyncTaskLogService.logTaskExecutionAsync(jobKey, triggerKey, execState,
+                                errorMessage, stackTrace, executionTime);
+                    } else {
+                        insertDetailedTaskLog(jobKey, triggerKey, execState, errorMessage, stackTrace, executionTime);
+                    }
+                } catch (Exception e) {
+                    logger.error("Failed to write task execution log: jobKey={}, triggerKey={}",
+                            jobKey, triggerKey, e);
+                }
             }
         }
     }
@@ -235,8 +242,8 @@ public abstract class BaseAbstractQuartzJob implements Job {
     private RetryContext getRetryContext(JobExecutionContext context) {
         JobDataMap dataMap = context.getJobDetail().getJobDataMap();
 
-        int retryTimes = dataMap.getInt(RETRY_TIMES_KEY);
-        long retryInterval = dataMap.getLong(RETRY_INTERVAL_KEY);
+        int retryTimes = dataMap.containsKey(RETRY_TIMES_KEY) ? dataMap.getInt(RETRY_TIMES_KEY) : 0;
+        long retryInterval = dataMap.containsKey(RETRY_INTERVAL_KEY) ? dataMap.getLong(RETRY_INTERVAL_KEY) : 1000;
         boolean exponentialBackoff = dataMap.containsKey(EXPONENTIAL_BACKOFF_KEY)
                 ? dataMap.getBoolean(EXPONENTIAL_BACKOFF_KEY) : true;
         double backoffMultiplier = dataMap.containsKey(BACKOFF_MULTIPLIER_KEY)
@@ -250,7 +257,7 @@ public abstract class BaseAbstractQuartzJob implements Job {
      */
     private long getTimeout(JobExecutionContext context) {
         JobDataMap dataMap = context.getJobDetail().getJobDataMap();
-        return dataMap.getLong(TIMEOUT_KEY);
+        return dataMap.containsKey(TIMEOUT_KEY) ? dataMap.getLong(TIMEOUT_KEY) : 0;
     }
 
     /**
@@ -277,8 +284,20 @@ public abstract class BaseAbstractQuartzJob implements Job {
      */
     public void insertDetailedTaskLog(String jobKey, String triggerKey, int execState,
             String errorMessage, String stackTrace, long executionTimeInMs) {
+        if (quartzJdbcTemplate == null) {
+            logger.debug("No quartzJdbcTemplate bean available, skipping task log insert: jobKey={}, triggerKey={}",
+                    jobKey, triggerKey);
+            return;
+        }
         quartzJdbcTemplate.update(QuartzSign.INSERT_DETAILED_SQL, jobKey, triggerKey, execState,
                 errorMessage, stackTrace, executionTimeInMs,
                 new Timestamp(System.currentTimeMillis()));
+    }
+
+    private QuartzUtilityProperties getProperties() {
+        if (properties == null) {
+            properties = new QuartzUtilityProperties();
+        }
+        return properties;
     }
 }
