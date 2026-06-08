@@ -1,0 +1,33 @@
+spring:
+  quartz:
+    job-store-type: memory
+    auto-startup: true
+    properties:
+      org.quartz.threadPool.threadCount: 5
+  datasource:
+    url: jdbc:h2:mem:testdb;DB_CLOSE_DELAY=-1;MODE=MySQL
+    driver-class-name: org.h2.Driver
+    username: sa
+    password:
+
+co-quartz:
+  log:
+    enabled: true
+    retention-days: 30
+    cleanup-cron: "0 0 2 * * ?"
+    auto-create-table: true
+  async:
+    enabled: true
+    log-queue-capacity: 500
+    log-batch-size: 50
+    log-flush-interval-ms: 500
+    shutdown-flush-timeout-ms: 5000
+  monitoring:
+    enabled: true
+    slow-task-threshold-ms: 5000
+    consecutive-failure-threshold: 3
+  timeout-pool:
+    core-size: 2
+    max-size: 5
+  annotation:
+    enabled: true

@@ -4,16 +4,22 @@
   xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
   <modelVersion>4.0.0</modelVersion>
 
-  <groupId>com.coco</groupId>
-  <artifactId>quartz-utility</artifactId>
-  <version>1.1.0-SNAPSHOT</version>
+  <groupId>io.github.cococzl</groupId>
+  <artifactId>co-quartz</artifactId>
+  <version>2.1.0-SNAPSHOT</version>
   <packaging>pom</packaging>
+  <name>Co-Quartz</name>
+  <description>Spring Boot Starter for Quartz scheduling with automatic logging, retry, timeout, and alerting</description>
+  <url>https://github.com/cococzl/quartz-utility</url>
+
   <modules>
-    <module>quartz-utility-starter</module>
-    <module>quartz-utility-autoconfigure</module>
+    <module>co-quartz-core</module>
+    <module>co-quartz-jdbc</module>
+    <module>co-quartz-starter</module>
   </modules>
 
   <properties>
+    <java.version>17</java.version>
     <maven.compiler.source>17</maven.compiler.source>
     <maven.compiler.target>17</maven.compiler.target>
     <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
