@@ -1,6 +1,7 @@
 package io.github.cococzl.coquartz.core;
 
 import io.github.cococzl.coquartz.enums.MisfirePolicy;
+import io.github.cococzl.coquartz.exception.CoQuartzConfigurationException;
 import io.github.cococzl.coquartz.exception.CoQuartzSchedulingException;
 import org.quartz.*;
 
@@ -19,6 +20,7 @@ public class QuartzTaskBuilder {
     private Map<String, Object> jobData = new HashMap<>();
     private String cronExpression;
     private int intervalSeconds;
+    private String timeZone;
     private boolean durable = false;
     private boolean recoverable = false;
     private int retryTimes = 0;
@@ -85,6 +87,11 @@ public class QuartzTaskBuilder {
 
     public QuartzTaskBuilder intervalInSeconds(int intervalSeconds) {
         this.intervalSeconds = intervalSeconds;
+        return this;
+    }
+
+    public QuartzTaskBuilder timeZone(String timeZone) {
+        this.timeZone = timeZone;
         return this;
     }
 
@@ -160,6 +167,18 @@ public class QuartzTaskBuilder {
         }
     }
 
+    public Date schedule(CoQuartzScheduler scheduler) throws CoQuartzSchedulingException {
+        String originalTimeZone = timeZone;
+        try {
+            if (timeZone == null || timeZone.isBlank()) {
+                timeZone = scheduler.getDefaultTimeZone();
+            }
+            return schedule(scheduler.getScheduler());
+        } finally {
+            timeZone = originalTimeZone;
+        }
+    }
+
     public Date executeNow(Scheduler scheduler) throws CoQuartzSchedulingException {
         try {
             JobDetail jobDetail = buildJobDetail();
@@ -187,6 +206,10 @@ public class QuartzTaskBuilder {
         }
 
         Map<String, Object> allData = new HashMap<>(jobData);
+        allData.put(CoQuartzConstants.OWNER, CoQuartzConstants.OWNER_VALUE);
+        allData.put(CoQuartzConstants.CODE_OWNED, "false");
+        allData.put(CoQuartzConstants.METADATA_VERSION, CoQuartzConstants.METADATA_VERSION_VALUE);
+        allData.put(CoQuartzConstants.TASK_SOURCE, CoQuartzConstants.SOURCE_DYNAMIC);
         allData.put(CoQuartzConstants.ENHANCED, true);
         allData.put(CoQuartzConstants.RETRY_TIMES, retryTimes);
         allData.put(CoQuartzConstants.RETRY_INTERVAL, retryInterval);
@@ -195,8 +218,12 @@ public class QuartzTaskBuilder {
         allData.put(CoQuartzConstants.TIMEOUT, timeout);
         allData.put(CoQuartzConstants.CONCURRENT, concurrent);
         allData.put(CoQuartzConstants.MISFIRE_POLICY, misfirePolicy.name());
+        allData.put(CoQuartzConstants.TIME_ZONE, effectiveTimeZone());
+        if (!concurrent) {
+            allData.put(CoQuartzConstants.DELEGATE_JOB_CLASS, jobClass.getName());
+        }
 
-        JobBuilder builder = JobBuilder.newJob(jobClass)
+        JobBuilder builder = JobBuilder.newJob(concurrent ? jobClass : NonConcurrentJobWrapper.class)
                 .withIdentity(jobName, jobGroup)
                 .storeDurably(durable)
                 .requestRecovery(recoverable)
@@ -210,51 +237,26 @@ public class QuartzTaskBuilder {
     }
 
     private Trigger buildTrigger() throws CoQuartzSchedulingException {
-        String tName = triggerName != null ? triggerName : "TRIGGER_" + jobName;
-
-        TriggerBuilder<Trigger> triggerBuilder = TriggerBuilder.newTrigger()
-                .withIdentity(tName, triggerGroup);
-
-        if (startAt != null) {
-            triggerBuilder.startAt(startAt);
-        } else {
-            triggerBuilder.startNow();
-        }
-
-        if (endAt != null) {
-            triggerBuilder.endAt(endAt);
-        }
-
-        if (cronExpression != null && !cronExpression.isEmpty()) {
-            CronScheduleBuilder cronBuilder = CronScheduleBuilder.cronSchedule(cronExpression);
-            applyCronMisfirePolicy(cronBuilder, misfirePolicy);
-            return triggerBuilder.withSchedule(cronBuilder).build();
-        } else if (intervalSeconds > 0) {
-            SimpleScheduleBuilder simpleBuilder = SimpleScheduleBuilder.simpleSchedule()
-                    .withIntervalInSeconds(intervalSeconds)
-                    .repeatForever();
-            applySimpleMisfirePolicy(simpleBuilder, misfirePolicy);
-            return triggerBuilder.withSchedule(simpleBuilder).build();
-        } else {
-            throw new CoQuartzSchedulingException("Either cronExpression or intervalSeconds must be specified");
+        String tName = triggerName != null ? triggerName : CoQuartzConstants.TRIGGER_KEY_PREFIX + jobName;
+        try {
+            return QuartzTriggerFactory.build(
+                    tName,
+                    triggerGroup,
+                    cronExpression,
+                    intervalSeconds,
+                    effectiveTimeZone(),
+                    misfirePolicy,
+                    startAt,
+                    endAt,
+                    JobKey.jobKey(jobName, jobGroup));
+        } catch (CoQuartzConfigurationException e) {
+            throw new CoQuartzSchedulingException(e.getMessage(), e);
         }
     }
 
-    private void applyCronMisfirePolicy(CronScheduleBuilder builder, MisfirePolicy policy) {
-        if (policy == null) return;
-        switch (policy) {
-            case FIRE_NOW -> builder.withMisfireHandlingInstructionFireAndProceed();
-            case IGNORE_MISFIRES -> builder.withMisfireHandlingInstructionIgnoreMisfires();
-            default -> builder.withMisfireHandlingInstructionIgnoreMisfires();
-        }
-    }
-
-    private void applySimpleMisfirePolicy(SimpleScheduleBuilder builder, MisfirePolicy policy) {
-        if (policy == null) return;
-        switch (policy) {
-            case FIRE_NOW -> builder.withMisfireHandlingInstructionFireNow();
-            case IGNORE_MISFIRES -> builder.withMisfireHandlingInstructionIgnoreMisfires();
-            default -> builder.withMisfireHandlingInstructionNextWithExistingCount();
-        }
+    private String effectiveTimeZone() {
+        return timeZone == null || timeZone.isBlank()
+                ? CoQuartzConstants.DEFAULT_TIME_ZONE
+                : timeZone;
     }
 }

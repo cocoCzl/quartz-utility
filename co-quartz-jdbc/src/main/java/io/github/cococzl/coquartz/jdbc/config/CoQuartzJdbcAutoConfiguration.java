@@ -7,12 +7,15 @@ import io.github.cococzl.coquartz.jdbc.repository.JdbcTaskLogRepository;
 import io.github.cococzl.coquartz.jdbc.schema.SchemaInitializer;
 import io.github.cococzl.coquartz.jdbc.service.JdbcAsyncTaskLogService;
 import io.github.cococzl.coquartz.jdbc.service.JdbcTaskMonitoringService;
+import io.github.cococzl.coquartz.jdbc.service.JdbcReliableAuditService;
 import io.github.cococzl.coquartz.jdbc.service.TaskLogService;
 import io.github.cococzl.coquartz.listener.CoQuartzJobListener;
 import io.github.cococzl.coquartz.metrics.CoQuartzMetrics;
 import io.github.cococzl.coquartz.service.AsyncTaskLogService;
 import io.github.cococzl.coquartz.service.TaskLogRepository;
 import io.github.cococzl.coquartz.service.TaskMonitoringService;
+import io.github.cococzl.coquartz.service.LogSanitizer;
+import io.github.cococzl.coquartz.service.ReliableAuditService;
 import org.quartz.Scheduler;
 import org.quartz.SchedulerException;
 import org.springframework.beans.factory.ObjectProvider;
@@ -23,9 +26,12 @@ import org.springframework.boot.autoconfigure.condition.ConditionalOnClass;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
+import org.springframework.boot.ApplicationRunner;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.context.annotation.Bean;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.jdbc.datasource.DriverManagerDataSource;
 
 import javax.sql.DataSource;
 
@@ -37,9 +43,24 @@ import javax.sql.DataSource;
 @EnableConfigurationProperties(CoQuartzProperties.class)
 public class CoQuartzJdbcAutoConfiguration {
 
+    @Bean(name = "coQuartzLogDataSource")
+    @ConditionalOnMissingBean(name = "coQuartzLogDataSource")
+    public DataSource coQuartzLogDataSource(DataSource applicationDataSource, CoQuartzProperties properties) {
+        CoQuartzProperties.LogConfig.DataSourceConfig config = properties.getLog().getDatasource();
+        if (config.getUrl() == null || config.getUrl().isBlank()) return applicationDataSource;
+        DriverManagerDataSource dataSource = new DriverManagerDataSource();
+        dataSource.setUrl(config.getUrl());
+        dataSource.setUsername(config.getUsername());
+        dataSource.setPassword(config.getPassword());
+        if (config.getDriverClassName() != null && !config.getDriverClassName().isBlank()) {
+            dataSource.setDriverClassName(config.getDriverClassName());
+        }
+        return dataSource;
+    }
+
     @Bean
-    @ConditionalOnMissingBean
-    public JdbcTemplate coQuartzJdbcTemplate(DataSource dataSource) {
+    @ConditionalOnMissingBean(name = "coQuartzJdbcTemplate")
+    public JdbcTemplate coQuartzJdbcTemplate(@Qualifier("coQuartzLogDataSource") DataSource dataSource) {
         return new JdbcTemplate(dataSource);
     }
 
@@ -52,18 +73,52 @@ public class CoQuartzJdbcAutoConfiguration {
     @Bean
     @ConditionalOnMissingBean(AsyncTaskLogService.class)
     public JdbcAsyncTaskLogService jdbcAsyncTaskLogService(TaskLogRepository taskLogRepository,
-                                                             CoQuartzProperties properties) {
+                                                             CoQuartzProperties properties,
+                                                             ApplicationEventPublisher eventPublisher,
+                                                             ObjectProvider<AlertEventPublisher> alertEventPublisherProvider) {
         CoQuartzProperties.AsyncConfig asyncConfig = properties.getAsync();
         return new JdbcAsyncTaskLogService(taskLogRepository,
                 asyncConfig.getLogQueueCapacity(),
                 asyncConfig.getLogBatchSize(),
-                asyncConfig.getLogFlushIntervalMs());
+                asyncConfig.getLogFlushIntervalMs(),
+                asyncConfig.getShutdownFlushTimeoutMs(),
+                asyncConfig.getLogWriteMaxRetries(), eventPublisher, alertEventPublisherProvider);
     }
 
     @Bean
     @ConditionalOnMissingBean(TaskMonitoringService.class)
     public JdbcTaskMonitoringService jdbcTaskMonitoringService(TaskLogRepository taskLogRepository) {
         return new JdbcTaskMonitoringService(taskLogRepository);
+    }
+
+    @Bean
+    @ConditionalOnBean({AsyncTaskLogService.class, CoQuartzMetrics.class})
+    public Object coQuartzJdbcMetricsBinder(AsyncTaskLogService asyncTaskLogService,
+                                             TaskLogRepository taskLogRepository,
+                                             CoQuartzMetrics metrics) {
+        metrics.bindLogPipeline(asyncTaskLogService);
+        metrics.bindReliableAudit(taskLogRepository);
+        return new Object();
+    }
+
+    @Bean
+    @ConditionalOnMissingBean(ReliableAuditService.class)
+    public ReliableAuditService reliableAuditService(TaskLogRepository taskLogRepository,
+                                                     ApplicationEventPublisher eventPublisher) {
+        return new JdbcReliableAuditService(taskLogRepository, eventPublisher);
+    }
+
+    @Bean
+    @ConditionalOnBean(Scheduler.class)
+    @ConditionalOnProperty(prefix = "co-quartz.log", name = "reliable-audit", havingValue = "true")
+    public ApplicationRunner reliableAuditRecoveryRunner(Scheduler scheduler, ReliableAuditService reliableAuditService,
+                                                         CoQuartzProperties properties) {
+        return args -> {
+            long thresholdMs = properties.getLog().getReliableAuditRecoveryThresholdMs();
+            if (thresholdMs <= 0) return;
+            reliableAuditService.recoverInterruptedBefore(java.time.LocalDateTime.now().minusNanos(thresholdMs * 1_000_000),
+                    scheduler.getSchedulerInstanceId(), scheduler.getMetaData().isJobStoreClustered());
+        };
     }
 
     @Bean
@@ -93,8 +148,9 @@ public class CoQuartzJdbcAutoConfiguration {
     @ConditionalOnBean(AsyncTaskLogService.class)
     public AlertEventPublisher alertEventPublisher(ApplicationEventPublisher eventPublisher,
                                                      CoQuartzProperties properties,
-                                                     TaskLogRepository taskLogRepository) {
-        return new AlertEventPublisher(eventPublisher, taskLogRepository, properties);
+                                                     TaskLogRepository taskLogRepository,
+                                                     @Qualifier("coQuartzAlertExecutor") java.util.concurrent.Executor alertExecutor) {
+        return new AlertEventPublisher(eventPublisher, properties, alertExecutor);
     }
 
     @Bean
@@ -102,10 +158,14 @@ public class CoQuartzJdbcAutoConfiguration {
     public CoQuartzJobListener coQuartzJobListener(AsyncTaskLogService asyncTaskLogService,
                                                      Scheduler scheduler,
                                                      ObjectProvider<CoQuartzMetrics> metricsProvider,
-                                                     ObjectProvider<AlertEventPublisher> alertEventPublisherProvider) throws SchedulerException {
+                                                     ObjectProvider<AlertEventPublisher> alertEventPublisherProvider,
+                                                     CoQuartzProperties properties,
+                                                     ObjectProvider<LogSanitizer> logSanitizerProvider,
+                                                     ObjectProvider<ReliableAuditService> reliableAuditServiceProvider) throws SchedulerException {
         CoQuartzMetrics metrics = metricsProvider.getIfAvailable();
         AlertEventPublisher alertEventPublisher = alertEventPublisherProvider.getIfAvailable();
-        CoQuartzJobListener listener = new CoQuartzJobListener(asyncTaskLogService, metrics, alertEventPublisher);
+        CoQuartzJobListener listener = new CoQuartzJobListener(asyncTaskLogService, metrics, alertEventPublisher,
+                properties, logSanitizerProvider.getIfAvailable(), reliableAuditServiceProvider.getIfAvailable());
         scheduler.getListenerManager().addJobListener(listener);
         return listener;
     }

@@ -5,6 +5,8 @@ import io.github.cococzl.coquartz.enums.LogTaskExecStateEnum;
 import io.github.cococzl.coquartz.jdbc.repository.JdbcTaskLogRepository;
 import io.github.cococzl.coquartz.jdbc.schema.SchemaInitializer;
 import io.github.cococzl.coquartz.config.CoQuartzProperties;
+import io.github.cococzl.coquartz.event.TaskLogPipelineEvent;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -15,6 +17,7 @@ import javax.sql.DataSource;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.UUID;
+import java.util.concurrent.CopyOnWriteArrayList;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -22,6 +25,12 @@ class JdbcAsyncTaskLogServiceTest {
 
     private JdbcAsyncTaskLogService asyncLogService;
     private JdbcTaskLogRepository repository;
+    private JdbcTemplate jdbcTemplate;
+
+    @AfterEach
+    void tearDown() {
+        asyncLogService.shutdown();
+    }
 
     @BeforeEach
     void setUp() {
@@ -29,7 +38,7 @@ class JdbcAsyncTaskLogServiceTest {
                 .setType(EmbeddedDatabaseType.H2)
                 .setName("testdb_" + System.nanoTime())
                 .build();
-        JdbcTemplate jdbcTemplate = new JdbcTemplate(dataSource);
+        jdbcTemplate = new JdbcTemplate(dataSource);
         CoQuartzProperties properties = new CoQuartzProperties();
         properties.getLog().setAutoCreateTable(true);
         SchemaInitializer schemaInitializer = new SchemaInitializer(jdbcTemplate, properties);
@@ -92,5 +101,53 @@ class JdbcAsyncTaskLogServiceTest {
 
         List<TaskExecutionLog> logs = repository.latestLogs("DEFAULT.shutdownJob", 10);
         assertThat(logs).hasSize(1);
+    }
+
+    @Test
+    void fullQueueIncrementsDroppedCountAndPublishesPipelineEvent() {
+        asyncLogService.shutdown();
+        List<TaskLogPipelineEvent> events = new CopyOnWriteArrayList<>();
+        asyncLogService = new JdbcAsyncTaskLogService(repository, 1, 10, 60_000,
+                1_000, 1, event -> { if (event instanceof TaskLogPipelineEvent pipelineEvent) events.add(pipelineEvent); });
+
+        asyncLogService.logTaskExecutionAsync(createLog("DEFAULT.first"));
+        asyncLogService.logTaskExecutionAsync(createLog("DEFAULT.dropped"));
+
+        assertThat(asyncLogService.getPipelineStatus().queueSize()).isEqualTo(1);
+        assertThat(asyncLogService.getPipelineStatus().droppedCount()).isEqualTo(1);
+        assertThat(events).anyMatch(event -> event.getType() == TaskLogPipelineEvent.Type.QUEUE_FULL);
+    }
+
+    @Test
+    void permanentWriteFailureIsBoundedAndObservable() {
+        asyncLogService.shutdown();
+        List<TaskLogPipelineEvent> events = new CopyOnWriteArrayList<>();
+        asyncLogService = new JdbcAsyncTaskLogService(repository, 10, 10, 60_000,
+                1_000, 1, event -> { if (event instanceof TaskLogPipelineEvent pipelineEvent) events.add(pipelineEvent); });
+        jdbcTemplate.execute("DROP TABLE quartz_task_log");
+
+        asyncLogService.logTaskExecutionAsync(createLog("DEFAULT.writeFailure"));
+        asyncLogService.flushLogsImmediately();
+        asyncLogService.flushLogsImmediately();
+
+        assertThat(asyncLogService.getPipelineStatus().writeFailureCount()).isEqualTo(2);
+        assertThat(asyncLogService.getPipelineStatus().permanentFailureCount()).isEqualTo(1);
+        assertThat(asyncLogService.getPipelineStatus().queueSize()).isZero();
+        assertThat(events).anyMatch(event -> event.getType() == TaskLogPipelineEvent.Type.PERMANENT_WRITE_FAILURE);
+    }
+
+    @Test
+    void shutdownReportsRecordsThatCouldNotBeFlushedWithinConfiguredTimeout() {
+        asyncLogService.shutdown();
+        List<TaskLogPipelineEvent> events = new CopyOnWriteArrayList<>();
+        asyncLogService = new JdbcAsyncTaskLogService(repository, 10, 10, 60_000,
+                0, 10, event -> { if (event instanceof TaskLogPipelineEvent pipelineEvent) events.add(pipelineEvent); });
+        jdbcTemplate.execute("DROP TABLE quartz_task_log");
+
+        asyncLogService.logTaskExecutionAsync(createLog("DEFAULT.unflushed"));
+        asyncLogService.shutdown();
+
+        assertThat(asyncLogService.getPipelineStatus().unflushedCount()).isEqualTo(1);
+        assertThat(events).anyMatch(event -> event.getType() == TaskLogPipelineEvent.Type.SHUTDOWN_UNFLUSHED);
     }
 }

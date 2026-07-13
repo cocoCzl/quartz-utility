@@ -4,6 +4,8 @@ public enum LogTaskExecStateEnum {
 
     FAIL(0),
     SUCCESS(1),
+    STARTED(2),
+    INTERRUPTED(3),
     UNKNOWN(-99);
 
     private final int code;

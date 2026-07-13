@@ -1,6 +1,8 @@
 package io.github.cococzl.coquartz.service;
 
+import io.github.cococzl.coquartz.core.CoQuartzConstants;
 import io.github.cococzl.coquartz.dto.TaskInfo;
+import io.github.cococzl.coquartz.dto.TaskSource;
 import org.quartz.*;
 import org.quartz.impl.matchers.GroupMatcher;
 
@@ -42,7 +44,7 @@ public class TaskQueryService {
         info.setDescription(jobDetail.getDescription());
         info.setDurable(jobDetail.isDurable());
         info.setRecoverable(jobDetail.requestsRecovery());
-        info.setJobData(jobDetail.getJobDataMap().getWrappedMap());
+        info.setSource(resolveSource(jobDetail));
 
         List<? extends Trigger> triggers = scheduler.getTriggersOfJob(jobDetail.getKey());
         if (!triggers.isEmpty()) {
@@ -65,6 +67,20 @@ public class TaskQueryService {
         }
 
         return info;
+    }
+
+    private TaskSource resolveSource(JobDetail jobDetail) {
+        if (Boolean.parseBoolean(jobDetail.getJobDataMap()
+                .getString(CoQuartzConstants.CODE_OWNED))) {
+            return TaskSource.DECLARATIVE;
+        }
+        if (CoQuartzConstants.OWNER_VALUE.equals(jobDetail.getJobDataMap()
+                .getString(CoQuartzConstants.OWNER))
+                && CoQuartzConstants.SOURCE_DYNAMIC.equals(jobDetail.getJobDataMap()
+                .getString(CoQuartzConstants.TASK_SOURCE))) {
+            return TaskSource.DYNAMIC;
+        }
+        return TaskSource.EXTERNAL;
     }
 
     public List<String> getRunningJobs() throws SchedulerException {

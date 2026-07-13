@@ -1,7 +1,6 @@
 package io.github.cococzl.coquartz.core;
 
 import io.github.cococzl.coquartz.enums.MisfirePolicy;
-import io.github.cococzl.coquartz.enums.TimeEnum;
 import org.quartz.*;
 
 import java.util.Date;
@@ -32,49 +31,20 @@ public final class SchedulerCore {
 
     public static Trigger getCronTrigger(String triggerName, String triggerGroup, String cronExpression,
                                           MisfirePolicy misfirePolicy, Date startAt) {
-        CronScheduleBuilder cronBuilder = CronScheduleBuilder.cronSchedule(cronExpression);
-        applyMisfirePolicy(cronBuilder, misfirePolicy);
-        CronTrigger trigger = TriggerBuilder.newTrigger()
-                .withIdentity(triggerName, triggerGroup)
-                .withSchedule(cronBuilder)
-                .startNow()
-                .build();
-        return trigger;
+        return getCronTrigger(triggerName, triggerGroup, cronExpression,
+                CoQuartzConstants.DEFAULT_TIME_ZONE, misfirePolicy, startAt);
+    }
+
+    public static Trigger getCronTrigger(String triggerName, String triggerGroup, String cronExpression,
+                                          String timeZone, MisfirePolicy misfirePolicy, Date startAt) {
+        return QuartzTriggerFactory.build(triggerName, triggerGroup, cronExpression, 0,
+                timeZone, misfirePolicy, startAt, null);
     }
 
     public static Trigger getSimpleTrigger(String triggerName, String triggerGroup, int intervalSeconds,
                                              MisfirePolicy misfirePolicy) {
-        SimpleScheduleBuilder scheduleBuilder = SimpleScheduleBuilder.simpleSchedule()
-                .withIntervalInSeconds(intervalSeconds)
-                .repeatForever();
-        applyMisfirePolicy(scheduleBuilder, misfirePolicy);
-        return TriggerBuilder.newTrigger()
-                .withIdentity(triggerName, triggerGroup)
-                .withSchedule(scheduleBuilder)
-                .startNow()
-                .build();
-    }
-
-    private static void applyMisfirePolicy(CronScheduleBuilder builder, MisfirePolicy misfirePolicy) {
-        if (misfirePolicy == null) {
-            return;
-        }
-        switch (misfirePolicy) {
-            case FIRE_NOW -> builder.withMisfireHandlingInstructionFireAndProceed();
-            case IGNORE_MISFIRES -> builder.withMisfireHandlingInstructionIgnoreMisfires();
-            default -> builder.withMisfireHandlingInstructionIgnoreMisfires();
-        }
-    }
-
-    private static void applyMisfirePolicy(SimpleScheduleBuilder builder, MisfirePolicy misfirePolicy) {
-        if (misfirePolicy == null) {
-            return;
-        }
-        switch (misfirePolicy) {
-            case FIRE_NOW -> builder.withMisfireHandlingInstructionFireNow();
-            case IGNORE_MISFIRES -> builder.withMisfireHandlingInstructionIgnoreMisfires();
-            default -> builder.withMisfireHandlingInstructionNextWithExistingCount();
-        }
+        return QuartzTriggerFactory.build(triggerName, triggerGroup, "", intervalSeconds,
+                CoQuartzConstants.DEFAULT_TIME_ZONE, misfirePolicy, null, null);
     }
 
     public static JobKey getJobKey(String jobName) {

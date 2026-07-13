@@ -128,7 +128,7 @@ class CoQuartzJobFactoryTest {
     }
 
     @Test
-    void isNonConcurrent_wrapsWithNonConcurrentJobWrapper() throws Exception {
+    void nonConcurrentJobIsNotWrappedOnlyAtRuntime() throws Exception {
         JobDataMap jobDataMap = new JobDataMap();
         jobDataMap.put(CoQuartzConstants.ENHANCED, true);
         jobDataMap.put(CoQuartzConstants.CONCURRENT, false);
@@ -136,9 +136,8 @@ class CoQuartzJobFactoryTest {
         TriggerFiredBundle bundle = createBundle(jobDataMap);
         Object result = jobFactory.createJobInstance(bundle);
 
-        assertThat(result).isInstanceOf(NonConcurrentJobWrapper.class);
-        NonConcurrentJobWrapper wrapper = (NonConcurrentJobWrapper) result;
-        assertThat(wrapper.getDelegate()).isInstanceOf(EnhancedJob.class);
+        assertThat(result).isInstanceOf(EnhancedJob.class);
+        assertThat(result).isNotInstanceOf(NonConcurrentJobWrapper.class);
     }
 
     @Test
@@ -162,7 +161,7 @@ class CoQuartzJobFactoryTest {
         TriggerFiredBundle bundle = createBundle(jobDataMap);
         Object result = jobFactory.createJobInstance(bundle);
 
-        assertThat(result).isInstanceOf(NonConcurrentJobWrapper.class);
+        assertThat(result).isInstanceOf(EnhancedJob.class);
     }
 
     @Test
@@ -186,7 +185,7 @@ class CoQuartzJobFactoryTest {
         TriggerFiredBundle bundle = createBundle(jobDataMap);
         Object result = jobFactory.createJobInstance(bundle);
 
-        assertThat(result).isInstanceOf(NonConcurrentJobWrapper.class);
+        assertThat(result).isInstanceOf(EnhancedJob.class);
     }
 
     @Test

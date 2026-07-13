@@ -9,6 +9,10 @@ public class TaskExecutionLog {
     private String id;
     private String jobKey;
     private String triggerKey;
+    private String executionId;
+    private String fireInstanceId;
+    private String schedulerInstanceId;
+    private String definitionVersion;
     private LocalDateTime startTime;
     private LocalDateTime endTime;
     private Long executionTimeMs;
@@ -45,6 +49,14 @@ public class TaskExecutionLog {
     public void setTriggerKey(String triggerKey) {
         this.triggerKey = triggerKey;
     }
+    public String getExecutionId() { return executionId; }
+    public void setExecutionId(String executionId) { this.executionId = executionId; }
+    public String getFireInstanceId() { return fireInstanceId; }
+    public void setFireInstanceId(String fireInstanceId) { this.fireInstanceId = fireInstanceId; }
+    public String getSchedulerInstanceId() { return schedulerInstanceId; }
+    public void setSchedulerInstanceId(String schedulerInstanceId) { this.schedulerInstanceId = schedulerInstanceId; }
+    public String getDefinitionVersion() { return definitionVersion; }
+    public void setDefinitionVersion(String definitionVersion) { this.definitionVersion = definitionVersion; }
 
     public LocalDateTime getStartTime() {
         return startTime;

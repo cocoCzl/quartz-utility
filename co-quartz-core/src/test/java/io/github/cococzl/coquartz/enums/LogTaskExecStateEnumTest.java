@@ -47,6 +47,8 @@ class LogTaskExecStateEnumTest {
         assertThat(LogTaskExecStateEnum.values()).containsExactlyInAnyOrder(
                 LogTaskExecStateEnum.SUCCESS,
                 LogTaskExecStateEnum.FAIL,
+                LogTaskExecStateEnum.STARTED,
+                LogTaskExecStateEnum.INTERRUPTED,
                 LogTaskExecStateEnum.UNKNOWN
         );
     }

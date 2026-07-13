@@ -18,11 +18,20 @@ public class JdbcTaskLogRepository implements TaskLogRepository {
 
     private static final String INSERT_SQL = """
             INSERT INTO quartz_task_log (id, job_key, trigger_key, start_time, end_time, execution_time_ms,
-                exec_state, error_message, stack_trace, attempt, is_final_attempt, execute_time)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                exec_state, error_message, stack_trace, attempt, is_final_attempt, execute_time, execution_id, fire_instance_id, scheduler_instance_id, definition_version)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """;
 
     private static final String COUNT_SQL = "SELECT COUNT(*) FROM quartz_task_log";
+    private static final String UPDATE_LIFECYCLE_SQL = """
+            UPDATE quartz_task_log SET end_time = ?, execution_time_ms = ?, exec_state = ?, error_message = ?, stack_trace = ?, is_final_attempt = ?
+            WHERE id = ? AND exec_state = ?
+            """;
+    private static final String FIND_STARTED_BEFORE_SQL = "SELECT * FROM quartz_task_log WHERE exec_state = ? AND start_time < ?";
+    private static final String MARK_INTERRUPTED_SQL = """
+            UPDATE quartz_task_log SET end_time = ?, exec_state = ?, is_final_attempt = TRUE
+            WHERE id = ? AND exec_state = ?
+            """;
     private static final String COUNT_SUCCESS_SQL = "SELECT COUNT(*) FROM quartz_task_log WHERE exec_state = ?";
     private static final String COUNT_FAIL_SQL = "SELECT COUNT(*) FROM quartz_task_log WHERE exec_state = ?";
     private static final String COUNT_BY_JOB_KEY_SQL = "SELECT COUNT(*) FROM quartz_task_log WHERE job_key = ?";
@@ -41,8 +50,8 @@ public class JdbcTaskLogRepository implements TaskLogRepository {
         if (cachedDialect != null) {
             return cachedDialect;
         }
-        try {
-            String dbName = jdbcTemplate.getDataSource().getConnection().getMetaData().getDatabaseProductName().toLowerCase();
+        try (java.sql.Connection connection = jdbcTemplate.getDataSource().getConnection()) {
+            String dbName = connection.getMetaData().getDatabaseProductName().toLowerCase();
             cachedDialect = dbName;
             return dbName;
         } catch (Exception e) {
@@ -56,6 +65,10 @@ public class JdbcTaskLogRepository implements TaskLogRepository {
         log.setId(rs.getString("id"));
         log.setJobKey(rs.getString("job_key"));
         log.setTriggerKey(rs.getString("trigger_key"));
+        log.setExecutionId(rs.getString("execution_id"));
+        log.setFireInstanceId(rs.getString("fire_instance_id"));
+        log.setSchedulerInstanceId(rs.getString("scheduler_instance_id"));
+        log.setDefinitionVersion(rs.getString("definition_version"));
         log.setStartTime(rs.getTimestamp("start_time") != null ? rs.getTimestamp("start_time").toLocalDateTime() : null);
         log.setEndTime(rs.getTimestamp("end_time") != null ? rs.getTimestamp("end_time").toLocalDateTime() : null);
         log.setExecutionTimeMs(rs.getObject("execution_time_ms") != null ? rs.getLong("execution_time_ms") : null);
@@ -82,8 +95,35 @@ public class JdbcTaskLogRepository implements TaskLogRepository {
                 log.getStackTrace(),
                 log.getAttempt(),
                 log.isFinalAttempt(),
-                log.getExecuteTime()
+                log.getExecuteTime(), log.getExecutionId(), log.getFireInstanceId(),
+                log.getSchedulerInstanceId(), log.getDefinitionVersion()
         );
+    }
+
+    @Override
+    public void updateLifecycle(TaskExecutionLog log) {
+        jdbcTemplate.update(UPDATE_LIFECYCLE_SQL, log.getEndTime(), log.getExecutionTimeMs(),
+                log.getExecState() == null ? LogTaskExecStateEnum.UNKNOWN.getCode() : log.getExecState().getCode(),
+                log.getErrorMessage(), log.getStackTrace(), log.isFinalAttempt(), log.getId(),
+                LogTaskExecStateEnum.STARTED.getCode());
+    }
+
+    @Override
+    public List<TaskExecutionLog> findStartedBefore(LocalDateTime cutoff) {
+        return jdbcTemplate.query(FIND_STARTED_BEFORE_SQL, ROW_MAPPER, LogTaskExecStateEnum.STARTED.getCode(), cutoff);
+    }
+
+    @Override
+    public boolean markInterrupted(String id, LocalDateTime endTime) {
+        return jdbcTemplate.update(MARK_INTERRUPTED_SQL, endTime, LogTaskExecStateEnum.INTERRUPTED.getCode(),
+                id, LogTaskExecStateEnum.STARTED.getCode()) == 1;
+    }
+
+    @Override
+    public long countStarted() {
+        Long count = jdbcTemplate.queryForObject("SELECT COUNT(*) FROM quartz_task_log WHERE exec_state = ?", Long.class,
+                LogTaskExecStateEnum.STARTED.getCode());
+        return count == null ? 0 : count;
     }
 
     @Override
@@ -96,6 +136,11 @@ public class JdbcTaskLogRepository implements TaskLogRepository {
             sql.append(" AND job_key = ?");
             countSql.append(" AND job_key = ?");
             params.add(query.getJobKey());
+        }
+        if (query.getExecutionId() != null && !query.getExecutionId().isEmpty()) {
+            sql.append(" AND execution_id = ?");
+            countSql.append(" AND execution_id = ?");
+            params.add(query.getExecutionId());
         }
         if (query.getExecState() != null) {
             sql.append(" AND exec_state = ?");

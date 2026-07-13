@@ -1,2 +1,3 @@
 io.github.cococzl.coquartz.config.CoQuartzCoreAutoConfiguration
 io.github.cococzl.coquartz.config.CoQuartzMicrometerAutoConfiguration
+io.github.cococzl.coquartz.config.CoQuartzActuatorAutoConfiguration

@@ -1,8 +1,10 @@
 package io.github.cococzl.coquartz;
 
 import io.github.cococzl.coquartz.annotation.QuartzJob;
+import io.github.cococzl.coquartz.annotation.QuartzTask;
 import io.github.cococzl.coquartz.config.CoQuartzProperties;
 import io.github.cococzl.coquartz.core.CoQuartzScheduler;
+import io.github.cococzl.coquartz.core.CoQuartzConstants;
 import io.github.cococzl.coquartz.core.QuartzTaskBuilder;
 import io.github.cococzl.coquartz.dto.TaskExecutionLog;
 import io.github.cococzl.coquartz.event.TaskConsecutiveFailureEvent;
@@ -17,6 +19,7 @@ import org.junit.jupiter.api.Test;
 import org.quartz.Job;
 import org.quartz.JobExecutionContext;
 import org.quartz.JobExecutionException;
+import org.quartz.JobKey;
 import org.quartz.Scheduler;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
@@ -36,7 +39,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.awaitility.Awaitility.await;
 
 @SpringBootTest
-@org.springframework.context.annotation.Import({CoQuartzE2eTest.TestEventListener.class, CoQuartzE2eTest.TestService.class, CoQuartzE2eTest.SimpleAnnotatedJob.class, CoQuartzE2eTest.RetryAnnotatedJob.class})
+@org.springframework.context.annotation.Import({CoQuartzE2eTest.TestEventListener.class, CoQuartzE2eTest.TestService.class, CoQuartzE2eTest.MethodTaskBean.class, CoQuartzE2eTest.SimpleAnnotatedJob.class, CoQuartzE2eTest.RetryAnnotatedJob.class})
 class CoQuartzE2eTest {
 
     @SpringBootApplication(scanBasePackages = "io.github.cococzl.coquartz")
@@ -68,6 +71,16 @@ class CoQuartzE2eTest {
     @Component
     static class TestService {
         public String greet() { return "hello"; }
+    }
+
+    @Component
+    static class MethodTaskBean {
+        final AtomicInteger count = new AtomicInteger(0);
+
+        @QuartzTask(name = "declarativeMethodTask", intervalSeconds = 1, concurrent = true)
+        public void run() {
+            count.incrementAndGet();
+        }
     }
 
     @QuartzJob(name = "simpleAnnotatedJob", cron = "0/2 * * * * ?", concurrent = true)
@@ -131,6 +144,7 @@ class CoQuartzE2eTest {
     @Autowired TaskLogRepository taskLogRepository;
     @Autowired CoQuartzProperties properties;
     @Autowired TestEventListener eventListener;
+    @Autowired MethodTaskBean methodTaskBean;
     @Autowired JdbcTemplate jdbcTemplate;
 
     @BeforeEach
@@ -165,6 +179,12 @@ class CoQuartzE2eTest {
     void quartzJobAutoRegistersAndAutowires() throws Exception {
         assertThat(scheduler.checkExists(org.quartz.JobKey.jobKey("simpleAnnotatedJob"))).isTrue();
         await().atMost(15, TimeUnit.SECONDS).until(() -> SimpleAnnotatedJob.COUNT.get() > 0);
+    }
+
+    @Test
+    void declarativeMethodTaskAutoRegistersAndExecutes() throws Exception {
+        assertThat(scheduler.checkExists(JobKey.jobKey("declarativeMethodTask", CoQuartzConstants.DEFAULT_GROUP))).isTrue();
+        await().atMost(10, TimeUnit.SECONDS).until(() -> methodTaskBean.count.get() > 0);
     }
 
     @Test

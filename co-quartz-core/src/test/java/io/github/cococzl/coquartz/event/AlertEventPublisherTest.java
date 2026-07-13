@@ -82,16 +82,8 @@ class AlertEventPublisherTest {
     void publishConsecutiveFailureIfNeeded_allFailures_publishesEvent() {
         alertEventPublisher = new AlertEventPublisher(eventPublisher, taskLogRepository, properties);
 
-        TaskExecutionLog log1 = TaskExecutionLog.failure("DEFAULT.testJob", "TRIGGER_testJob",
-                null, null, 100, "err1", null, 1, true);
-        TaskExecutionLog log2 = TaskExecutionLog.failure("DEFAULT.testJob", "TRIGGER_testJob",
-                null, null, 200, "err2", null, 2, true);
-        TaskExecutionLog log3 = TaskExecutionLog.failure("DEFAULT.testJob", "TRIGGER_testJob",
-                null, null, 300, "err3", null, 3, true);
-
-        when(taskLogRepository.findRecentByJobKey("DEFAULT.testJob", 3))
-                .thenReturn(List.of(log1, log2, log3));
-
+        alertEventPublisher.publishConsecutiveFailureIfNeeded("DEFAULT.testJob");
+        alertEventPublisher.publishConsecutiveFailureIfNeeded("DEFAULT.testJob");
         alertEventPublisher.publishConsecutiveFailureIfNeeded("DEFAULT.testJob");
 
         ArgumentCaptor<TaskConsecutiveFailureEvent> captor = ArgumentCaptor.forClass(TaskConsecutiveFailureEvent.class);
@@ -103,17 +95,12 @@ class AlertEventPublisherTest {
     }
 
     @Test
-    void publishConsecutiveFailureIfNeeded_mixedResults_noEvent() {
+    void successfulExecutionResetsFailureWindowAndAllowsANewAlert() {
         alertEventPublisher = new AlertEventPublisher(eventPublisher, taskLogRepository, properties);
 
-        TaskExecutionLog successLog = TaskExecutionLog.success("DEFAULT.testJob", "TRIGGER_testJob",
-                null, null, 100, 1, true);
-        TaskExecutionLog failLog = TaskExecutionLog.failure("DEFAULT.testJob", "TRIGGER_testJob",
-                null, null, 200, "err", null, 2, true);
-
-        when(taskLogRepository.findRecentByJobKey("DEFAULT.testJob", 3))
-                .thenReturn(List.of(successLog, failLog));
-
+        alertEventPublisher.publishConsecutiveFailureIfNeeded("DEFAULT.testJob");
+        alertEventPublisher.publishConsecutiveFailureIfNeeded("DEFAULT.testJob");
+        alertEventPublisher.recordSuccess("DEFAULT.testJob");
         alertEventPublisher.publishConsecutiveFailureIfNeeded("DEFAULT.testJob");
 
         verify(eventPublisher, never()).publishEvent(any(TaskConsecutiveFailureEvent.class));
@@ -122,11 +109,6 @@ class AlertEventPublisherTest {
     @Test
     void publishConsecutiveFailureIfNeeded_fewerLogsThanThreshold_noEvent() {
         alertEventPublisher = new AlertEventPublisher(eventPublisher, taskLogRepository, properties);
-
-        when(taskLogRepository.findRecentByJobKey("DEFAULT.testJob", 3))
-                .thenReturn(Collections.singletonList(
-                        TaskExecutionLog.failure("DEFAULT.testJob", "TRIGGER_testJob",
-                                null, null, 100, "err", null, 1, true)));
 
         alertEventPublisher.publishConsecutiveFailureIfNeeded("DEFAULT.testJob");
 

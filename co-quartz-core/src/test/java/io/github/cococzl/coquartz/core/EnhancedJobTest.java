@@ -4,12 +4,16 @@ import io.github.cococzl.coquartz.config.CoQuartzProperties;
 import io.github.cococzl.coquartz.dto.TaskExecutionLog;
 import io.github.cococzl.coquartz.enums.LogTaskExecStateEnum;
 import io.github.cococzl.coquartz.event.AlertEventPublisher;
+import io.github.cococzl.coquartz.exception.TaskTimeoutException;
 import io.github.cococzl.coquartz.metrics.CoQuartzMetrics;
 import io.github.cococzl.coquartz.service.AsyncTaskLogService;
+import io.github.cococzl.coquartz.service.LogSanitizer;
+import io.github.cococzl.coquartz.service.ReliableAuditService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
+import org.mockito.InOrder;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.quartz.*;
@@ -36,6 +40,9 @@ class EnhancedJobTest {
     @Mock
     private CoQuartzMetrics metrics;
 
+    @Mock
+    private ReliableAuditService reliableAuditService;
+
     private CoQuartzProperties properties;
 
     @Mock
@@ -46,6 +53,8 @@ class EnhancedJobTest {
 
     @Mock
     private Trigger trigger;
+    @Mock
+    private Scheduler scheduler;
 
     private JobDataMap enhancedConfig;
 
@@ -62,6 +71,7 @@ class EnhancedJobTest {
         lenient().when(context.getTrigger()).thenReturn(trigger);
         lenient().when(jobDetail.getKey()).thenReturn(new JobKey("testJob", "DEFAULT"));
         lenient().when(trigger.getKey()).thenReturn(new TriggerKey("testTrigger", "DEFAULT"));
+        lenient().when(context.getScheduler()).thenReturn(scheduler);
     }
 
     private EnhancedJob createEnhancedJob() {
@@ -109,29 +119,48 @@ class EnhancedJobTest {
     }
 
     @Test
-    void execute_failure_withRetry_succeedsOnSecondAttempt() throws Exception {
+    void execute_failure_withRetry_schedulesDelayedRetry() throws Exception {
         enhancedConfig.put(CoQuartzConstants.RETRY_TIMES, 2);
         enhancedConfig.put(CoQuartzConstants.RETRY_INTERVAL, 0);
-        doThrow(new JobExecutionException("fail"))
-                .doNothing()
-                .when(delegate).execute(context);
+        doThrow(new JobExecutionException("fail")).when(delegate).execute(context);
         EnhancedJob job = createEnhancedJob();
 
         job.execute(context);
 
-        verify(delegate, times(2)).execute(context);
+        verify(delegate).execute(context);
+        ArgumentCaptor<Trigger> retryTrigger = ArgumentCaptor.forClass(Trigger.class);
+        verify(scheduler).scheduleJob(retryTrigger.capture());
+        assertThat(retryTrigger.getValue().getKey().getGroup()).isEqualTo(CoQuartzConstants.RETRY_TRIGGER_GROUP);
+        assertThat(retryTrigger.getValue().getJobDataMap().getInt(CoQuartzConstants.RETRY_ATTEMPT)).isEqualTo(2);
+        assertThat(retryTrigger.getValue().getJobDataMap().getString(CoQuartzConstants.RETRY_EXECUTION_ID)).isNotBlank();
+        assertThat(retryTrigger.getValue().getStartTime()).isNotNull();
 
         ArgumentCaptor<TaskExecutionLog> logCaptor = ArgumentCaptor.forClass(TaskExecutionLog.class);
-        verify(asyncTaskLogService, times(2)).logTaskExecutionAsync(logCaptor.capture());
+        verify(asyncTaskLogService).logTaskExecutionAsync(logCaptor.capture());
 
         var logs = logCaptor.getAllValues();
         assertThat(logs.get(0).getExecState()).isEqualTo(LogTaskExecStateEnum.FAIL);
         assertThat(logs.get(0).getAttempt()).isEqualTo(1);
-        assertThat(logs.get(1).getExecState()).isEqualTo(LogTaskExecStateEnum.SUCCESS);
-        assertThat(logs.get(1).getAttempt()).isEqualTo(2);
-        assertThat(logs.get(1).isFinalAttempt()).isTrue();
+        assertThat(logs.get(0).getExecutionId()).isNotBlank();
 
         verify(alertEventPublisher).publishFailure(eq("DEFAULT.testJob"), anyString(), anyString());
+    }
+
+    @Test
+    void delayedRetryDoesNotBlockCurrentWorkerThread() throws Exception {
+        enhancedConfig.put(CoQuartzConstants.RETRY_TIMES, 1);
+        enhancedConfig.put(CoQuartzConstants.RETRY_INTERVAL, 5_000L);
+        doThrow(new JobExecutionException("fail")).when(delegate).execute(context);
+
+        long startedAt = System.nanoTime();
+        createEnhancedJob().execute(context);
+        long elapsedMs = java.util.concurrent.TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - startedAt);
+
+        ArgumentCaptor<Trigger> retryTrigger = ArgumentCaptor.forClass(Trigger.class);
+        verify(scheduler).scheduleJob(retryTrigger.capture());
+        assertThat(elapsedMs).isLessThan(1_000);
+        assertThat(retryTrigger.getValue().getStartTime().getTime())
+                .isGreaterThanOrEqualTo(System.currentTimeMillis() + 4_000);
     }
 
     @Test
@@ -141,22 +170,17 @@ class EnhancedJobTest {
         doThrow(new JobExecutionException("persistent error")).when(delegate).execute(context);
         EnhancedJob job = createEnhancedJob();
 
-        assertThatThrownBy(() -> job.execute(context))
-                .isInstanceOf(JobExecutionException.class)
-                .hasMessage("persistent error");
-
-        verify(delegate, times(3)).execute(context);
+        job.execute(context);
+        verify(scheduler).scheduleJob(any(Trigger.class));
 
         ArgumentCaptor<TaskExecutionLog> logCaptor = ArgumentCaptor.forClass(TaskExecutionLog.class);
-        verify(asyncTaskLogService, times(3)).logTaskExecutionAsync(logCaptor.capture());
+        verify(asyncTaskLogService).logTaskExecutionAsync(logCaptor.capture());
 
         var logs = logCaptor.getAllValues();
         assertThat(logs).allMatch(log -> log.getExecState() == LogTaskExecStateEnum.FAIL);
-        assertThat(logs.get(2).isFinalAttempt()).isTrue();
-        assertThat(logs.get(2).getAttempt()).isEqualTo(3);
+        assertThat(logs.get(0).isFinalAttempt()).isFalse();
 
-        verify(alertEventPublisher, times(3)).publishFailure(eq("DEFAULT.testJob"), anyString(), anyString());
-        verify(alertEventPublisher).publishConsecutiveFailureIfNeeded("DEFAULT.testJob");
+        verify(alertEventPublisher).publishFailure(eq("DEFAULT.testJob"), anyString(), anyString());
     }
 
     @Test
@@ -236,7 +260,70 @@ class EnhancedJobTest {
         verify(asyncTaskLogService).logTaskExecutionAsync(argThat(log ->
                 log.getExecState() == LogTaskExecStateEnum.FAIL
         ));
-        verify(alertEventPublisher).publishTimeout(eq("DEFAULT.testJob"), eq(1L));
+        verify(alertEventPublisher).publishTimeout(eq("DEFAULT.testJob"), eq(1L), anyBoolean());
+    }
+
+    @Test
+    void disabledStackCaptureOmitsStackTraceFromLogAndFailureEvent() throws Exception {
+        enhancedConfig.put(CoQuartzConstants.RETRY_TIMES, 0);
+        properties.getLog().setCaptureStackTrace(false);
+        doThrow(new JobExecutionException("token=private-value")).when(delegate).execute(context);
+
+        assertThatThrownBy(() -> createEnhancedJob().execute(context)).isInstanceOf(JobExecutionException.class);
+
+        verify(asyncTaskLogService).logTaskExecutionAsync(argThat(log ->
+                log.getStackTrace() == null && "token=***".equals(log.getErrorMessage())));
+        verify(alertEventPublisher).publishFailure("DEFAULT.testJob", "token=***", null);
+    }
+
+    @Test
+    void customLogSanitizerIsAppliedBeforeLoggingAndPublishing() throws Exception {
+        enhancedConfig.put(CoQuartzConstants.RETRY_TIMES, 0);
+        doThrow(new JobExecutionException("private diagnostic")).when(delegate).execute(context);
+        LogSanitizer sanitizer = value -> value == null ? null : "sanitized";
+        EnhancedJob job = new EnhancedJob(delegate, enhancedConfig, asyncTaskLogService, timeoutExecutor,
+                alertEventPublisher, properties, metrics, sanitizer);
+
+        assertThatThrownBy(() -> job.execute(context)).isInstanceOf(JobExecutionException.class);
+
+        verify(asyncTaskLogService).logTaskExecutionAsync(argThat(log ->
+                "sanitized".equals(log.getErrorMessage()) && "sanitized".equals(log.getStackTrace())));
+        verify(alertEventPublisher).publishFailure("DEFAULT.testJob", "sanitized", "sanitized");
+    }
+
+    @Test
+    void reliableAuditCreatesStartedRecordBeforeDelegateAndCompletesSameRecord() throws Exception {
+        properties.getLog().setReliableAudit(true);
+        EnhancedJob job = new EnhancedJob(delegate, enhancedConfig, asyncTaskLogService, timeoutExecutor,
+                alertEventPublisher, properties, metrics, value -> value, reliableAuditService);
+
+        job.execute(context);
+
+        InOrder inOrder = inOrder(reliableAuditService, delegate);
+        inOrder.verify(reliableAuditService).recordStarted(argThat((TaskExecutionLog log) ->
+                log.getExecState() == LogTaskExecStateEnum.STARTED && log.getEndTime() == null));
+        inOrder.verify(delegate).execute(context);
+        inOrder.verify(reliableAuditService).recordCompleted(argThat((TaskExecutionLog log) ->
+                log.getExecState() == LogTaskExecStateEnum.SUCCESS && log.getEndTime() != null));
+        verify(asyncTaskLogService, never()).logTaskExecutionAsync(any());
+    }
+
+    @Test
+    void timeoutThatIgnoresInterruptReportsUnconfirmedTermination() throws Exception {
+        enhancedConfig.put(CoQuartzConstants.RETRY_TIMES, 0);
+        enhancedConfig.put(CoQuartzConstants.TIMEOUT, 10);
+        doAnswer(invocation -> {
+            long deadline = System.nanoTime() + java.util.concurrent.TimeUnit.MILLISECONDS.toNanos(200);
+            while (System.nanoTime() < deadline) {
+                try { Thread.sleep(10); } catch (InterruptedException ignored) { }
+            }
+            return null;
+        }).when(delegate).execute(context);
+
+        assertThatThrownBy(() -> createEnhancedJob().execute(context))
+                .isInstanceOf(TaskTimeoutException.class)
+                .hasMessageContaining("termination is unconfirmed");
+        verify(alertEventPublisher).publishTimeout("DEFAULT.testJob", 10L, false);
     }
 
     @Test

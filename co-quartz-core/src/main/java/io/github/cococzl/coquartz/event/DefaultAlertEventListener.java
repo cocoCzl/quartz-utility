@@ -29,4 +29,14 @@ public class DefaultAlertEventListener {
         log.error("Consecutive failure: jobKey={}, threshold={}, recentFailures={}",
                 event.getJobKey(), event.getThreshold(), event.getRecentFailures());
     }
+
+    @EventListener
+    public void onLogPipeline(TaskLogPipelineEvent event) {
+        log.warn("Execution-log pipeline event: type={}, count={}", event.getType(), event.getCount());
+    }
+
+    @EventListener
+    public void onReliableAuditFailure(ReliableAuditFailureEvent event) {
+        log.error("Reliable audit write failed: jobKey={}, phase={}", event.getJobKey(), event.getPhase());
+    }
 }

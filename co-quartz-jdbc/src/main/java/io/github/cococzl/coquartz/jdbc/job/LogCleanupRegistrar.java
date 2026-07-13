@@ -1,6 +1,8 @@
 package io.github.cococzl.coquartz.jdbc.job;
 
 import io.github.cococzl.coquartz.config.CoQuartzProperties;
+import io.github.cococzl.coquartz.core.QuartzTriggerFactory;
+import io.github.cococzl.coquartz.enums.MisfirePolicy;
 import io.github.cococzl.coquartz.service.TaskLogRepository;
 import org.quartz.*;
 import org.slf4j.Logger;
@@ -44,12 +46,16 @@ public class LogCleanupRegistrar {
                     .build();
 
             String cronExpression = properties.getLog().getCleanupCron();
-            CronScheduleBuilder cronSchedule = CronScheduleBuilder.cronSchedule(cronExpression);
-            Trigger trigger = TriggerBuilder.newTrigger()
-                    .withIdentity("TRIGGER_" + LogCleanupJob.JOB_NAME, LogCleanupJob.JOB_GROUP)
-                    .withSchedule(cronSchedule)
-                    .forJob(jobDetail)
-                    .build();
+            Trigger trigger = QuartzTriggerFactory.build(
+                            "TRIGGER_" + LogCleanupJob.JOB_NAME,
+                            LogCleanupJob.JOB_GROUP,
+                            cronExpression,
+                            0,
+                            properties.getScheduling().getDefaultTimeZone(),
+                            MisfirePolicy.SMART_POLICY,
+                            null,
+                            null,
+                            jobKey);
 
             scheduler.scheduleJob(jobDetail, trigger);
             log.info("Co-Quartz log cleanup job registered with cron: {}", cronExpression);

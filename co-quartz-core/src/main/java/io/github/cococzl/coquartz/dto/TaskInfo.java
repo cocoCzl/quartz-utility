@@ -1,7 +1,5 @@
 package io.github.cococzl.coquartz.dto;
 
-import java.util.Map;
-
 public class TaskInfo {
 
     private String jobName;
@@ -10,7 +8,7 @@ public class TaskInfo {
     private String description;
     private boolean durable;
     private boolean recoverable;
-    private Map<String, Object> jobData;
+    private TaskSource source;
     private String triggerName;
     private String triggerGroup;
     private String triggerType;
@@ -32,8 +30,8 @@ public class TaskInfo {
     public void setDurable(boolean durable) { this.durable = durable; }
     public boolean isRecoverable() { return recoverable; }
     public void setRecoverable(boolean recoverable) { this.recoverable = recoverable; }
-    public Map<String, Object> getJobData() { return jobData; }
-    public void setJobData(Map<String, Object> jobData) { this.jobData = jobData; }
+    public TaskSource getSource() { return source; }
+    public void setSource(TaskSource source) { this.source = source; }
     public String getTriggerName() { return triggerName; }
     public void setTriggerName(String triggerName) { this.triggerName = triggerName; }
     public String getTriggerGroup() { return triggerGroup; }

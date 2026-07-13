@@ -1,79 +1,89 @@
 package io.github.cococzl.coquartz.event;
 
 import io.github.cococzl.coquartz.config.CoQuartzProperties;
-import io.github.cococzl.coquartz.dto.TaskExecutionLog;
-import io.github.cococzl.coquartz.enums.LogTaskExecStateEnum;
-import io.github.cococzl.coquartz.service.AsyncTaskLogService;
 import io.github.cococzl.coquartz.service.TaskLogRepository;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.context.ApplicationEventPublisher;
 
-import java.util.List;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.Executor;
 
 public class AlertEventPublisher {
 
     private static final Logger log = LoggerFactory.getLogger(AlertEventPublisher.class);
 
     private final ApplicationEventPublisher eventPublisher;
-    private final TaskLogRepository taskLogRepository;
     private final CoQuartzProperties properties;
+    private final Executor executor;
+    private final ConcurrentHashMap<String, FailureWindow> failureWindows = new ConcurrentHashMap<>();
 
     public AlertEventPublisher(ApplicationEventPublisher eventPublisher,
-                                TaskLogRepository taskLogRepository,
+                                TaskLogRepository ignoredRepository,
                                 CoQuartzProperties properties) {
-        this.eventPublisher = eventPublisher;
-        this.taskLogRepository = taskLogRepository;
-        this.properties = properties;
+        this(eventPublisher, properties, Runnable::run);
     }
 
     public AlertEventPublisher(ApplicationEventPublisher eventPublisher,
                                 CoQuartzProperties properties) {
+        this(eventPublisher, properties, Runnable::run);
+    }
+
+    public AlertEventPublisher(ApplicationEventPublisher eventPublisher, CoQuartzProperties properties, Executor executor) {
         this.eventPublisher = eventPublisher;
-        this.taskLogRepository = null;
         this.properties = properties;
+        this.executor = executor == null ? Runnable::run : executor;
     }
 
     public void publishFailure(String jobKey, String errorMessage, String stackTrace) {
-        try {
+        dispatch(() -> {
             eventPublisher.publishEvent(new TaskFailureEvent(this, jobKey, errorMessage, stackTrace));
-        } catch (Exception e) {
-            log.error("Failed to publish TaskFailureEvent for job: {}", jobKey, e);
-        }
+        }, "TaskFailureEvent", jobKey);
     }
 
     public void publishTimeout(String jobKey, long timeoutMs) {
-        try {
-            eventPublisher.publishEvent(new TaskTimeoutEvent(this, jobKey, timeoutMs));
-        } catch (Exception e) {
-            log.error("Failed to publish TaskTimeoutEvent for job: {}", jobKey, e);
-        }
+        publishTimeout(jobKey, timeoutMs, false);
+    }
+
+    public void publishTimeout(String jobKey, long timeoutMs, boolean terminationConfirmed) {
+        dispatch(() -> {
+            eventPublisher.publishEvent(new TaskTimeoutEvent(this, jobKey, timeoutMs, terminationConfirmed));
+        }, "TaskTimeoutEvent", jobKey);
     }
 
     public void publishSlowTask(String jobKey, long executionTimeMs, long thresholdMs) {
-        try {
+        dispatch(() -> {
             eventPublisher.publishEvent(new TaskSlowEvent(this, jobKey, executionTimeMs, thresholdMs));
-        } catch (Exception e) {
-            log.error("Failed to publish TaskSlowEvent for job: {}", jobKey, e);
-        }
+        }, "TaskSlowEvent", jobKey);
     }
 
     public void publishConsecutiveFailureIfNeeded(String jobKey) {
-        if (taskLogRepository == null) {
-            return;
+        int threshold = properties.getMonitoring().getConsecutiveFailureThreshold();
+        FailureWindow window = failureWindows.computeIfAbsent(jobKey, ignored -> new FailureWindow());
+        int failures = window.failures.incrementAndGet();
+        if (failures >= threshold && window.alerted.compareAndSet(false, true)) {
+            dispatch(() -> eventPublisher.publishEvent(new TaskConsecutiveFailureEvent(this, jobKey, threshold, failures)),
+                    "TaskConsecutiveFailureEvent", jobKey);
         }
+    }
+
+    public void recordSuccess(String jobKey) { failureWindows.remove(jobKey); }
+
+    public void publishLogPipeline(TaskLogPipelineEvent.Type type, long count) {
+        dispatch(() -> eventPublisher.publishEvent(new TaskLogPipelineEvent(this, type, count)),
+                "TaskLogPipelineEvent", "log-pipeline");
+    }
+
+    private void dispatch(Runnable action, String eventName, String jobKey) {
         try {
-            int threshold = properties.getMonitoring().getConsecutiveFailureThreshold();
-            List<TaskExecutionLog> recentLogs = taskLogRepository.findRecentByJobKey(jobKey, threshold);
-            if (recentLogs.size() >= threshold) {
-                boolean allFailed = recentLogs.stream()
-                        .allMatch(l -> l.getExecState() == LogTaskExecStateEnum.FAIL);
-                if (allFailed) {
-                    eventPublisher.publishEvent(new TaskConsecutiveFailureEvent(this, jobKey, threshold, recentLogs.size()));
-                }
-            }
-        } catch (Exception e) {
-            log.error("Failed to check consecutive failures for job: {}", jobKey, e);
-        }
+            executor.execute(() -> {
+                try { action.run(); } catch (Exception e) { log.error("Failed to publish {} for job: {}", eventName, jobKey, e); }
+            });
+        } catch (Exception e) { log.error("Failed to dispatch {} for job: {}", eventName, jobKey, e); }
+    }
+
+    private static final class FailureWindow {
+        private final java.util.concurrent.atomic.AtomicInteger failures = new java.util.concurrent.atomic.AtomicInteger();
+        private final java.util.concurrent.atomic.AtomicBoolean alerted = new java.util.concurrent.atomic.AtomicBoolean();
     }
 }

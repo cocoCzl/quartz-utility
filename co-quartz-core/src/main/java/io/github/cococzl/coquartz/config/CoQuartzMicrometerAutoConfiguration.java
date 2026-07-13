@@ -15,7 +15,7 @@ public class CoQuartzMicrometerAutoConfiguration {
 
     @Bean
     @ConditionalOnBean(MeterRegistry.class)
-    public CoQuartzMetrics coQuartzMetrics(MeterRegistry meterRegistry) {
-        return new CoQuartzMetrics(meterRegistry);
+    public CoQuartzMetrics coQuartzMetrics(MeterRegistry meterRegistry, CoQuartzProperties properties) {
+        return new CoQuartzMetrics(meterRegistry, properties.getMonitoring().getMaxMetricJobTags());
     }
 }

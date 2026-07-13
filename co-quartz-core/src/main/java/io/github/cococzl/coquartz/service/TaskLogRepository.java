@@ -13,6 +13,23 @@ public interface TaskLogRepository {
 
     void insert(TaskExecutionLog log);
 
+    /** Updates an existing reliable-audit lifecycle record. Implementations must be idempotent. */
+    default void updateLifecycle(TaskExecutionLog log) {
+        throw new UnsupportedOperationException("Reliable audit is not supported by this task-log repository");
+    }
+
+    default List<TaskExecutionLog> findStartedBefore(LocalDateTime cutoff) {
+        throw new UnsupportedOperationException("Reliable audit is not supported by this task-log repository");
+    }
+
+    default boolean markInterrupted(String id, LocalDateTime endTime) {
+        throw new UnsupportedOperationException("Reliable audit is not supported by this task-log repository");
+    }
+
+    default long countStarted() {
+        throw new UnsupportedOperationException("Reliable audit is not supported by this task-log repository");
+    }
+
     PageResult<TaskExecutionLog> pageLogs(TaskLogQuery query);
 
     List<TaskExecutionLog> latestLogs(String jobKey, int limit);

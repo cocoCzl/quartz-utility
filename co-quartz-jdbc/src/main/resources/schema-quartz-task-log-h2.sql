@@ -11,8 +11,10 @@ CREATE TABLE IF NOT EXISTS quartz_task_log (
     attempt          INT          NOT NULL DEFAULT 1,
     is_final_attempt BOOLEAN      NOT NULL DEFAULT TRUE,
     execute_time     TIMESTAMP     NOT NULL,
+    execution_id     VARCHAR(36), fire_instance_id VARCHAR(200), scheduler_instance_id VARCHAR(200), definition_version VARCHAR(100),
     PRIMARY KEY (id)
 );
 
 CREATE INDEX IF NOT EXISTS idx_task_log_job_key_start_time ON quartz_task_log (job_key, start_time);
 CREATE INDEX IF NOT EXISTS idx_task_log_exec_state ON quartz_task_log (exec_state);
+CREATE INDEX IF NOT EXISTS idx_task_log_execution_id ON quartz_task_log (execution_id);

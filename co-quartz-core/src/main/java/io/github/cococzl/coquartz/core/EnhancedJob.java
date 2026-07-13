@@ -4,15 +4,19 @@ import io.github.cococzl.coquartz.config.CoQuartzProperties;
 import io.github.cococzl.coquartz.dto.TaskExecutionLog;
 import io.github.cococzl.coquartz.enums.LogTaskExecStateEnum;
 import io.github.cococzl.coquartz.event.AlertEventPublisher;
+import io.github.cococzl.coquartz.exception.TaskTimeoutException;
 import io.github.cococzl.coquartz.metrics.CoQuartzMetrics;
 import io.github.cococzl.coquartz.service.AsyncTaskLogService;
+import io.github.cococzl.coquartz.service.DefaultLogSanitizer;
+import io.github.cococzl.coquartz.service.LogSanitizer;
+import io.github.cococzl.coquartz.service.ReliableAuditService;
 import org.quartz.*;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.time.LocalDateTime;
-import java.util.UUID;
 import java.util.concurrent.*;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 public class EnhancedJob implements Job {
 
@@ -21,17 +25,42 @@ public class EnhancedJob implements Job {
     private final Job delegate;
     private final JobDataMap enhancedConfig;
     private final AsyncTaskLogService asyncTaskLogService;
-    private final ScheduledExecutorService timeoutExecutor;
+    private final ExecutorService timeoutExecutor;
     private final AlertEventPublisher alertEventPublisher;
     private final CoQuartzProperties properties;
     private final CoQuartzMetrics metrics;
+    private final LogSanitizer logSanitizer;
+    private final ReliableAuditService reliableAuditService;
 
     public EnhancedJob(Job delegate, JobDataMap enhancedConfig,
                        AsyncTaskLogService asyncTaskLogService,
-                       ScheduledExecutorService timeoutExecutor,
+                       ExecutorService timeoutExecutor,
                        AlertEventPublisher alertEventPublisher,
                        CoQuartzProperties properties,
                        CoQuartzMetrics metrics) {
+        this(delegate, enhancedConfig, asyncTaskLogService, timeoutExecutor, alertEventPublisher, properties, metrics,
+                new DefaultLogSanitizer(), null);
+    }
+
+    public EnhancedJob(Job delegate, JobDataMap enhancedConfig,
+                       AsyncTaskLogService asyncTaskLogService,
+                       ExecutorService timeoutExecutor,
+                       AlertEventPublisher alertEventPublisher,
+                       CoQuartzProperties properties,
+                       CoQuartzMetrics metrics,
+                       LogSanitizer logSanitizer) {
+        this(delegate, enhancedConfig, asyncTaskLogService, timeoutExecutor, alertEventPublisher, properties, metrics,
+                logSanitizer, null);
+    }
+
+    public EnhancedJob(Job delegate, JobDataMap enhancedConfig,
+                       AsyncTaskLogService asyncTaskLogService,
+                       ExecutorService timeoutExecutor,
+                       AlertEventPublisher alertEventPublisher,
+                       CoQuartzProperties properties,
+                       CoQuartzMetrics metrics,
+                       LogSanitizer logSanitizer,
+                       ReliableAuditService reliableAuditService) {
         this.delegate = delegate;
         this.enhancedConfig = enhancedConfig;
         this.asyncTaskLogService = asyncTaskLogService;
@@ -39,6 +68,8 @@ public class EnhancedJob implements Job {
         this.alertEventPublisher = alertEventPublisher;
         this.properties = properties;
         this.metrics = metrics;
+        this.logSanitizer = logSanitizer == null ? new DefaultLogSanitizer() : logSanitizer;
+        this.reliableAuditService = reliableAuditService;
     }
 
     @Override
@@ -49,6 +80,15 @@ public class EnhancedJob implements Job {
         double backoffMultiplier = getDoubleConfig(CoQuartzConstants.BACKOFF_MULTIPLIER, 1.5);
         long timeoutMs = getLongConfig(CoQuartzConstants.TIMEOUT, 0);
         String jobKey = context.getJobDetail().getKey().toString();
+        JobDataMap runtimeData = context.getMergedJobDataMap();
+        if (runtimeData == null) {
+            runtimeData = new JobDataMap();
+        }
+        String executionId = runtimeData.getString(CoQuartzConstants.RETRY_EXECUTION_ID);
+        if (executionId == null || executionId.isBlank()) {
+            executionId = java.util.UUID.randomUUID().toString();
+        }
+        int scheduledAttempt = getIntConfig(runtimeData, CoQuartzConstants.RETRY_ATTEMPT, 1);
 
         RetryContext retryContext = new RetryContext(retryTimes, retryInterval, exponentialBackoff, backoffMultiplier);
         Exception lastException = null;
@@ -59,10 +99,13 @@ public class EnhancedJob implements Job {
 
         try {
             while (true) {
-                retryContext.recordAttempt();
-                int attempt = retryContext.getCurrentAttempt();
+                for (int index = 0; index < scheduledAttempt; index++) {
+                    retryContext.recordAttempt();
+                }
+                int attempt = scheduledAttempt;
 
                 LocalDateTime startTime = LocalDateTime.now();
+                TaskExecutionLog auditLog = startReliableAudit(context, executionId, attempt, startTime);
                 long startMs = System.currentTimeMillis();
                 LogTaskExecStateEnum execState;
                 String errorMessage = null;
@@ -77,17 +120,17 @@ public class EnhancedJob implements Job {
                     }
                     execState = LogTaskExecStateEnum.SUCCESS;
                 } catch (JobExecutionException e) {
-                    if (timeoutMs > 0 && e.getMessage() != null && e.getMessage().startsWith("Task timed out")) {
+                    if (e instanceof TaskTimeoutException) {
                         timedOut = true;
                     }
                     execState = LogTaskExecStateEnum.FAIL;
-                    errorMessage = CoQuartzUtils.truncate(e.getMessage(), 500);
-                    stackTrace = CoQuartzUtils.truncate(CoQuartzUtils.getStackTraceAsString(e), 4000);
+                    errorMessage = sanitize(e.getMessage(), 500);
+                    stackTrace = stackTrace(e);
                     lastException = e;
                 } catch (Exception e) {
                     execState = LogTaskExecStateEnum.FAIL;
-                    errorMessage = CoQuartzUtils.truncate(e.getMessage(), 500);
-                    stackTrace = CoQuartzUtils.truncate(CoQuartzUtils.getStackTraceAsString(e), 4000);
+                    errorMessage = sanitize(e.getMessage(), 500);
+                    stackTrace = stackTrace(e);
                     lastException = new JobExecutionException(e);
                 }
 
@@ -95,7 +138,7 @@ public class EnhancedJob implements Job {
                 LocalDateTime endTime = LocalDateTime.now();
                 String triggerKey = context.getTrigger().getKey().toString();
 
-                boolean noMoreRetries = !retryContext.canRetry();
+                boolean noMoreRetries = attempt > retryTimes;
 
                 TaskExecutionLog taskLog;
                 if (execState == LogTaskExecStateEnum.SUCCESS) {
@@ -103,18 +146,27 @@ public class EnhancedJob implements Job {
                 } else {
                     taskLog = TaskExecutionLog.failure(jobKey, triggerKey, startTime, endTime, executionTimeMs, errorMessage, stackTrace, attempt, noMoreRetries);
                 }
+                populateExecutionCorrelation(taskLog, context, executionId);
+                if (auditLog != null) {
+                    taskLog.setId(auditLog.getId());
+                    completeReliableAudit(taskLog);
+                }
 
-                logExecution(taskLog);
+                if (auditLog == null) {
+                    logExecution(taskLog);
+                }
 
                 if (metrics != null) {
                     if (execState == LogTaskExecStateEnum.SUCCESS) {
                         metrics.recordSuccess(jobKey, executionTimeMs);
                     } else {
                         metrics.recordFailure(jobKey, executionTimeMs);
+                        if (timedOut) metrics.recordTimeout(jobKey);
                     }
                 }
 
                 if (execState == LogTaskExecStateEnum.SUCCESS) {
+                    if (alertEventPublisher != null) alertEventPublisher.recordSuccess(jobKey);
                     if (alertEventPublisher != null) {
                         long slowThreshold = properties.getMonitoring().getSlowTaskThresholdMs();
                         if (slowThreshold > 0 && executionTimeMs > slowThreshold) {
@@ -128,7 +180,8 @@ public class EnhancedJob implements Job {
                     alertEventPublisher.publishFailure(jobKey, errorMessage, stackTrace);
 
                     if (timedOut) {
-                        alertEventPublisher.publishTimeout(jobKey, timeoutMs);
+                        alertEventPublisher.publishTimeout(jobKey, timeoutMs,
+                                ((TaskTimeoutException) lastException).isTerminationConfirmed());
                     }
 
                     if (noMoreRetries) {
@@ -143,12 +196,15 @@ public class EnhancedJob implements Job {
                     throw new JobExecutionException(lastException);
                 }
 
-                long delay = retryContext.getNextRetryDelay();
                 try {
-                    Thread.sleep(delay);
-                } catch (InterruptedException ie) {
-                    Thread.currentThread().interrupt();
-                    throw new JobExecutionException("Retry interrupted", ie);
+                    for (int index = 1; index < attempt; index++) {
+                        retryContext.getNextRetryDelay();
+                    }
+                    scheduleRetry(context, executionId, attempt + 1, retryContext.getNextRetryDelay());
+                    if (metrics != null) metrics.recordRetry(jobKey);
+                    return;
+                } catch (SchedulerException scheduleFailure) {
+                    throw new JobExecutionException("Failed to schedule delayed retry", scheduleFailure);
                 }
             }
         } finally {
@@ -159,11 +215,14 @@ public class EnhancedJob implements Job {
     }
 
     private void executeWithTimeout(JobExecutionContext context, long timeoutMs) throws Exception {
-        CompletableFuture<Void> future = CompletableFuture.runAsync(() -> {
+        AtomicBoolean completed = new AtomicBoolean();
+        Future<?> future = timeoutExecutor.submit(() -> {
             try {
                 delegate.execute(context);
             } catch (JobExecutionException e) {
                 throw new CompletionException(e);
+            } finally {
+                completed.set(true);
             }
         }, timeoutExecutor);
 
@@ -171,7 +230,7 @@ public class EnhancedJob implements Job {
             future.get(timeoutMs, TimeUnit.MILLISECONDS);
         } catch (TimeoutException e) {
             future.cancel(true);
-            throw new JobExecutionException("Task timed out after " + timeoutMs + "ms");
+            throw new TaskTimeoutException(timeoutMs, completed.get());
         } catch (ExecutionException e) {
             Throwable cause = e.getCause();
             if (cause instanceof JobExecutionException jee) {
@@ -194,10 +253,84 @@ public class EnhancedJob implements Job {
         }
     }
 
+    private TaskExecutionLog startReliableAudit(JobExecutionContext context, String executionId, int attempt,
+                                                LocalDateTime startTime) throws JobExecutionException {
+        if (reliableAuditService == null || properties == null || !properties.getLog().isReliableAudit()) return null;
+        TaskExecutionLog started = new TaskExecutionLog();
+        started.setId(java.util.UUID.randomUUID().toString());
+        started.setJobKey(context.getJobDetail().getKey().toString());
+        started.setTriggerKey(context.getTrigger().getKey().toString());
+        started.setStartTime(startTime);
+        started.setExecuteTime(startTime);
+        started.setExecState(LogTaskExecStateEnum.STARTED);
+        started.setAttempt(attempt);
+        started.setFinalAttempt(false);
+        populateExecutionCorrelation(started, context, executionId);
+        try {
+            reliableAuditService.recordStarted(started);
+            return started;
+        } catch (Exception e) {
+            throw new JobExecutionException("Failed to create reliable audit record before execution", e);
+        }
+    }
+
+    private void completeReliableAudit(TaskExecutionLog log) throws JobExecutionException {
+        try {
+            reliableAuditService.recordCompleted(log);
+        } catch (Exception e) {
+            throw new JobExecutionException("Failed to complete reliable audit record", e);
+        }
+    }
+
+    private String stackTrace(Throwable error) {
+        if (properties == null || !properties.getLog().isCaptureStackTrace()) return null;
+        return sanitize(CoQuartzUtils.getStackTraceAsString(error), 4000);
+    }
+
+    private String sanitize(String value, int maxLength) {
+        return CoQuartzUtils.truncate(logSanitizer.sanitize(value), maxLength);
+    }
+
+    private void populateExecutionCorrelation(TaskExecutionLog taskLog, JobExecutionContext context, String executionId) {
+        taskLog.setExecutionId(executionId);
+        taskLog.setFireInstanceId(context.getFireInstanceId());
+        JobDataMap jobDataMap = context.getJobDetail().getJobDataMap();
+        taskLog.setDefinitionVersion(jobDataMap == null ? null
+                : jobDataMap.getString(CoQuartzConstants.DEFINITION_VERSION));
+        try {
+            Scheduler scheduler = context.getScheduler();
+            taskLog.setSchedulerInstanceId(scheduler == null ? "unknown" : scheduler.getSchedulerInstanceId());
+        } catch (SchedulerException e) {
+            taskLog.setSchedulerInstanceId("unknown");
+        }
+    }
+
+    private void scheduleRetry(JobExecutionContext context, String executionId, int nextAttempt, long delayMs)
+            throws SchedulerException {
+        JobDataMap data = new JobDataMap();
+        data.put(CoQuartzConstants.RETRY_EXECUTION_ID, executionId);
+        data.put(CoQuartzConstants.RETRY_ATTEMPT, nextAttempt);
+        Trigger trigger = TriggerBuilder.newTrigger()
+                .withIdentity("RETRY_" + context.getFireInstanceId() + "_" + nextAttempt,
+                        CoQuartzConstants.RETRY_TRIGGER_GROUP)
+                .forJob(context.getJobDetail().getKey())
+                .usingJobData(data)
+                .startAt(new java.util.Date(System.currentTimeMillis() + delayMs))
+                .build();
+        context.getScheduler().scheduleJob(trigger);
+    }
+
     private int getIntConfig(String key, int defaultValue) {
         Object val = enhancedConfig.get(key);
         if (val instanceof Number) return ((Number) val).intValue();
         if (val instanceof String) return Integer.parseInt((String) val);
+        return defaultValue;
+    }
+
+    private int getIntConfig(JobDataMap data, String key, int defaultValue) {
+        Object value = data == null ? null : data.get(key);
+        if (value instanceof Number number) return number.intValue();
+        if (value instanceof String string) return Integer.parseInt(string);
         return defaultValue;
     }
 

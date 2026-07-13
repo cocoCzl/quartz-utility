@@ -19,6 +19,8 @@ public @interface QuartzJob {
 
     int intervalSeconds() default 0;
 
+    String timeZone() default "";
+
     boolean concurrent() default false;
 
     boolean durable() default false;

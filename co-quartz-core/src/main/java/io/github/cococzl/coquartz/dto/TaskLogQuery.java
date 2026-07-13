@@ -7,6 +7,7 @@ import java.time.LocalDateTime;
 public class TaskLogQuery {
 
     private String jobKey;
+    private String executionId;
     private LogTaskExecStateEnum execState;
     private LocalDateTime startTime;
     private LocalDateTime endTime;
@@ -20,6 +21,8 @@ public class TaskLogQuery {
     public void setJobKey(String jobKey) {
         this.jobKey = jobKey;
     }
+    public String getExecutionId() { return executionId; }
+    public void setExecutionId(String executionId) { this.executionId = executionId; }
 
     public LogTaskExecStateEnum getExecState() {
         return execState;

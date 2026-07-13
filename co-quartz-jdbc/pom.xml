@@ -37,6 +37,93 @@
       <artifactId>h2</artifactId>
       <scope>test</scope>
     </dependency>
+
   </dependencies>
+
+  <profiles>
+    <profile>
+      <id>integration-tests</id>
+      <properties>
+        <testcontainers.version>2.0.5</testcontainers.version>
+      </properties>
+      <dependencies>
+        <dependency>
+          <groupId>com.mysql</groupId>
+          <artifactId>mysql-connector-j</artifactId>
+          <scope>test</scope>
+        </dependency>
+        <dependency>
+          <groupId>org.postgresql</groupId>
+          <artifactId>postgresql</artifactId>
+          <scope>test</scope>
+        </dependency>
+        <dependency>
+          <groupId>org.testcontainers</groupId>
+          <artifactId>testcontainers-junit-jupiter</artifactId>
+          <version>${testcontainers.version}</version>
+          <scope>test</scope>
+        </dependency>
+        <dependency>
+          <groupId>org.testcontainers</groupId>
+          <artifactId>testcontainers</artifactId>
+          <version>${testcontainers.version}</version>
+          <scope>test</scope>
+        </dependency>
+        <dependency>
+          <groupId>org.testcontainers</groupId>
+          <artifactId>testcontainers-mysql</artifactId>
+          <version>${testcontainers.version}</version>
+          <scope>test</scope>
+        </dependency>
+        <dependency>
+          <groupId>org.testcontainers</groupId>
+          <artifactId>testcontainers-postgresql</artifactId>
+          <version>${testcontainers.version}</version>
+          <scope>test</scope>
+        </dependency>
+        <dependency>
+          <groupId>org.apache.commons</groupId>
+          <artifactId>commons-compress</artifactId>
+          <version>1.28.0</version>
+          <scope>test</scope>
+        </dependency>
+        <dependency>
+          <groupId>org.apache.commons</groupId>
+          <artifactId>commons-lang3</artifactId>
+          <version>3.19.0</version>
+          <scope>test</scope>
+        </dependency>
+      </dependencies>
+      <build>
+        <plugins>
+          <plugin>
+            <groupId>org.codehaus.mojo</groupId>
+            <artifactId>build-helper-maven-plugin</artifactId>
+            <version>3.6.1</version>
+            <executions>
+              <execution>
+                <id>add-integration-test-source</id>
+                <phase>generate-test-sources</phase>
+                <goals><goal>add-test-source</goal></goals>
+                <configuration>
+                  <sources><source>src/integration-test/java</source></sources>
+                </configuration>
+              </execution>
+            </executions>
+          </plugin>
+          <plugin>
+            <groupId>org.apache.maven.plugins</groupId>
+            <artifactId>maven-failsafe-plugin</artifactId>
+            <version>3.5.4</version>
+            <executions>
+              <execution>
+                <goals><goal>integration-test</goal><goal>verify</goal></goals>
+              </execution>
+            </executions>
+          </plugin>
+        </plugins>
+      </build>
+    </profile>
+  </profiles>
 
 </project>

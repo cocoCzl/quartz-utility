@@ -52,6 +52,10 @@ class JdbcTaskLogRepositoryTest {
         log.setAttempt(attempt);
         log.setFinalAttempt(isFinalAttempt);
         log.setExecuteTime(LocalDateTime.now());
+        log.setExecutionId("execution-" + attempt);
+        log.setFireInstanceId("fire-" + attempt);
+        log.setSchedulerInstanceId("node-a");
+        log.setDefinitionVersion("v1");
         if (state == LogTaskExecStateEnum.FAIL) {
             log.setErrorMessage("test error");
             log.setStackTrace("test stack trace");
@@ -70,6 +74,52 @@ class JdbcTaskLogRepositoryTest {
         assertThat(logs.get(0).getExecState()).isEqualTo(LogTaskExecStateEnum.SUCCESS);
         assertThat(logs.get(0).getAttempt()).isEqualTo(1);
         assertThat(logs.get(0).isFinalAttempt()).isTrue();
+        assertThat(logs.get(0).getExecutionId()).isEqualTo("execution-1");
+        assertThat(logs.get(0).getFireInstanceId()).isEqualTo("fire-1");
+    }
+
+    @Test
+    void reliableAuditLifecycleUpdatesStartedRecordIdempotently() {
+        TaskExecutionLog started = createLog("DEFAULT.auditJob", LogTaskExecStateEnum.STARTED, 1, false);
+        started.setEndTime(null);
+        started.setExecutionTimeMs(null);
+        repository.insert(started);
+
+        started.setExecState(LogTaskExecStateEnum.SUCCESS);
+        started.setEndTime(LocalDateTime.now());
+        started.setExecutionTimeMs(42L);
+        started.setFinalAttempt(true);
+        repository.updateLifecycle(started);
+        repository.updateLifecycle(started);
+
+        List<TaskExecutionLog> logs = repository.latestLogs("DEFAULT.auditJob", 10);
+        assertThat(logs).hasSize(1);
+        assertThat(logs.get(0).getExecState()).isEqualTo(LogTaskExecStateEnum.SUCCESS);
+        assertThat(logs.get(0).getExecutionTimeMs()).isEqualTo(42L);
+        assertThat(logs.get(0).isFinalAttempt()).isTrue();
+    }
+
+    @Test
+    void startedRecordsCanBeAtomicallyMarkedInterrupted() {
+        TaskExecutionLog old = createLog("DEFAULT.oldAudit", LogTaskExecStateEnum.STARTED, 1, false);
+        old.setStartTime(LocalDateTime.now().minusMinutes(2));
+        old.setEndTime(null);
+        old.setExecutionTimeMs(null);
+        repository.insert(old);
+        TaskExecutionLog recent = createLog("DEFAULT.recentAudit", LogTaskExecStateEnum.STARTED, 1, false);
+        recent.setEndTime(null);
+        recent.setExecutionTimeMs(null);
+        repository.insert(recent);
+
+        List<TaskExecutionLog> stale = repository.findStartedBefore(LocalDateTime.now().minusMinutes(1));
+        assertThat(stale).extracting(TaskExecutionLog::getId).containsExactly(old.getId());
+        assertThat(repository.markInterrupted(old.getId(), LocalDateTime.now())).isTrue();
+        assertThat(repository.markInterrupted(old.getId(), LocalDateTime.now())).isFalse();
+
+        assertThat(repository.latestLogs("DEFAULT.oldAudit", 1).get(0).getExecState())
+                .isEqualTo(LogTaskExecStateEnum.INTERRUPTED);
+        assertThat(repository.latestLogs("DEFAULT.recentAudit", 1).get(0).getExecState())
+                .isEqualTo(LogTaskExecStateEnum.STARTED);
     }
 
     @Test
@@ -135,6 +185,18 @@ class JdbcTaskLogRepositoryTest {
         assertThat(page.getTotal()).isEqualTo(5);
         assertThat(page.getPage()).isEqualTo(1);
         assertThat(page.getSize()).isEqualTo(3);
+    }
+
+    @Test
+    void pageLogs_filtersByExecutionId() {
+        repository.insert(createLog("DEFAULT.job1", LogTaskExecStateEnum.SUCCESS, 1, true));
+        repository.insert(createLog("DEFAULT.job1", LogTaskExecStateEnum.SUCCESS, 2, true));
+        TaskLogQuery query = new TaskLogQuery();
+        query.setExecutionId("execution-2");
+
+        PageResult<TaskExecutionLog> page = repository.pageLogs(query);
+        assertThat(page.getTotal()).isEqualTo(1);
+        assertThat(page.getRecords().get(0).getExecutionId()).isEqualTo("execution-2");
     }
 
     @Test

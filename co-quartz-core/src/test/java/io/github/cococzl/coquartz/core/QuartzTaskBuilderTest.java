@@ -77,6 +77,21 @@ class QuartzTaskBuilderTest {
         );
 
         assertThat(jobDetail.getJobDataMap().get(CoQuartzConstants.CONCURRENT)).isEqualTo(true);
+        assertThat(jobDetail.getJobClass()).isEqualTo(SampleJob.class);
+    }
+
+    @Test
+    void buildJobDetail_usesQuartzVisibleProxyForNonConcurrentJob() {
+        JobDetail jobDetail = extractJobDetail(
+                QuartzTaskBuilder.newBuilder()
+                        .jobClass(SampleJob.class)
+                        .jobName("testJob")
+                        .cron("0 0 * * * ?")
+        );
+
+        assertThat(jobDetail.getJobClass()).isEqualTo(NonConcurrentJobWrapper.class);
+        assertThat(jobDetail.getJobDataMap().getString(CoQuartzConstants.DELEGATE_JOB_CLASS))
+                .isEqualTo(SampleJob.class.getName());
     }
 
     @Test

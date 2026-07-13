@@ -14,7 +14,7 @@ class CoQuartzPropertiesTest {
         assertThat(log.isEnabled()).isTrue();
         assertThat(log.getRetentionDays()).isEqualTo(30);
         assertThat(log.getCleanupCron()).isEqualTo("0 0 2 * * ?");
-        assertThat(log.isAutoCreateTable()).isTrue();
+        assertThat(log.isAutoCreateTable()).isFalse();
     }
 
     @Test
@@ -46,6 +46,7 @@ class CoQuartzPropertiesTest {
 
         assertThat(pool.getCoreSize()).isEqualTo(2);
         assertThat(pool.getMaxSize()).isEqualTo(5);
+        assertThat(pool.getShutdownAwaitMs()).isEqualTo(10000);
     }
 
     @Test
@@ -54,6 +55,13 @@ class CoQuartzPropertiesTest {
         CoQuartzProperties.AnnotationConfig annotation = properties.getAnnotation();
 
         assertThat(annotation.isEnabled()).isTrue();
+    }
+
+    @Test
+    void defaultSchedulingConfig() {
+        CoQuartzProperties properties = new CoQuartzProperties();
+
+        assertThat(properties.getScheduling().getDefaultTimeZone()).isEqualTo("UTC");
     }
 
     @Test
