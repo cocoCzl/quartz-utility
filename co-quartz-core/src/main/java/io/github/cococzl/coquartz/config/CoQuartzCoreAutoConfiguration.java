@@ -14,6 +14,9 @@ import io.github.cococzl.coquartz.service.LogSanitizer;
 import io.github.cococzl.coquartz.service.ReliableAuditService;
 import io.github.cococzl.coquartz.service.TaskAdminService;
 import io.github.cococzl.coquartz.service.TaskQueryService;
+import io.github.cococzl.coquartz.service.TaskExecutionLogWriter;
+import io.github.cococzl.coquartz.listener.CoQuartzJobListener;
+import org.quartz.SchedulerException;
 import org.quartz.Scheduler;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.beans.factory.config.AutowireCapableBeanFactory;
@@ -43,6 +46,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 public class CoQuartzCoreAutoConfiguration {
 
     @Bean(destroyMethod = "close")
+    @ConditionalOnMissingBean(name = "coQuartzTimeoutExecutor")
     public ExecutorService coQuartzTimeoutExecutor(CoQuartzProperties properties) {
         CoQuartzProperties.TimeoutPoolConfig poolConfig = properties.getTimeoutPool();
         return new CoQuartzTimeoutExecutor(poolConfig.getCoreSize(), poolConfig.getMaxSize(),
@@ -58,6 +62,7 @@ public class CoQuartzCoreAutoConfiguration {
     }
 
     @Bean(destroyMethod = "shutdown")
+    @ConditionalOnMissingBean(name = "coQuartzAlertExecutor")
     public ExecutorService coQuartzAlertExecutor() {
         return Executors.newSingleThreadExecutor(r -> {
             Thread thread = new Thread(r, "co-quartz-alert");
@@ -67,8 +72,10 @@ public class CoQuartzCoreAutoConfiguration {
     }
 
     @Bean
+    @ConditionalOnMissingBean(CoQuartzJobFactory.class)
     public CoQuartzJobFactory coQuartzJobFactory(AutowireCapableBeanFactory beanFactory,
                                                    ObjectProvider<AsyncTaskLogService> asyncTaskLogServiceProvider,
+                                                   ObjectProvider<TaskExecutionLogWriter> logWriterProvider,
                                                    @Qualifier("coQuartzTimeoutExecutor") ExecutorService coQuartzTimeoutExecutor,
                                                    ObjectProvider<AlertEventPublisher> alertEventPublisherProvider,
                                                    CoQuartzProperties properties,
@@ -78,6 +85,7 @@ public class CoQuartzCoreAutoConfiguration {
         CoQuartzJobFactory jobFactory = new CoQuartzJobFactory();
         jobFactory.setBeanFactory(beanFactory);
         jobFactory.setAsyncTaskLogServiceProvider(asyncTaskLogServiceProvider);
+        jobFactory.setTaskExecutionLogWriterProvider(logWriterProvider);
         jobFactory.setTimeoutExecutor(coQuartzTimeoutExecutor);
         jobFactory.setAlertEventPublisherProvider(alertEventPublisherProvider);
         jobFactory.setProperties(properties);
@@ -94,31 +102,37 @@ public class CoQuartzCoreAutoConfiguration {
     }
 
     @Bean
+    @ConditionalOnMissingBean(name = "coQuartzJobFactoryCustomizer")
     public SchedulerFactoryBeanCustomizer coQuartzJobFactoryCustomizer(CoQuartzJobFactory coQuartzJobFactory) {
         return factory -> factory.setJobFactory(coQuartzJobFactory);
     }
 
     @Bean
+    @ConditionalOnMissingBean(CoQuartzScheduler.class)
     public CoQuartzScheduler coQuartzScheduler(Scheduler scheduler, CoQuartzProperties properties) {
         return new CoQuartzScheduler(scheduler, properties);
     }
 
     @Bean
+    @ConditionalOnMissingBean(TaskAdminService.class)
     public TaskAdminService taskAdminService(Scheduler scheduler, CoQuartzProperties properties) {
         return new TaskAdminService(scheduler, properties);
     }
 
     @Bean
+    @ConditionalOnMissingBean(TaskQueryService.class)
     public TaskQueryService taskQueryService(Scheduler scheduler) {
         return new TaskQueryService(scheduler);
     }
 
     @Bean
+    @ConditionalOnMissingBean(MethodTaskRegistry.class)
     public MethodTaskRegistry methodTaskRegistry(ApplicationContext applicationContext) {
         return new MethodTaskRegistry(applicationContext);
     }
 
     @Bean
+    @ConditionalOnMissingBean(QuartzJobAnnotationProcessor.class)
     public QuartzJobAnnotationProcessor quartzJobAnnotationProcessor(
             CoQuartzScheduler coQuartzScheduler,
             ApplicationContext applicationContext,
@@ -128,7 +142,31 @@ public class CoQuartzCoreAutoConfiguration {
     }
 
     @Bean
+    @ConditionalOnMissingBean(DefaultAlertEventListener.class)
     public DefaultAlertEventListener defaultAlertEventListener() {
         return new DefaultAlertEventListener();
+    }
+
+    @Bean
+    @ConditionalOnMissingBean(AlertEventPublisher.class)
+    public AlertEventPublisher alertEventPublisher(ApplicationEventPublisher eventPublisher,
+                                                     CoQuartzProperties properties,
+                                                     @Qualifier("coQuartzAlertExecutor") java.util.concurrent.Executor alertExecutor) {
+        return new AlertEventPublisher(eventPublisher, properties, alertExecutor);
+    }
+
+    @Bean
+    @ConditionalOnMissingBean(CoQuartzJobListener.class)
+    public CoQuartzJobListener coQuartzJobListener(Scheduler scheduler,
+                                                    ObjectProvider<TaskExecutionLogWriter> logWriterProvider,
+                                                    ObjectProvider<CoQuartzMetrics> metricsProvider,
+                                                    ObjectProvider<AlertEventPublisher> alertPublisherProvider,
+                                                    CoQuartzProperties properties,
+                                                    LogSanitizer logSanitizer,
+                                                    ObjectProvider<ReliableAuditService> auditProvider) throws SchedulerException {
+        CoQuartzJobListener listener = new CoQuartzJobListener(logWriterProvider, metricsProvider,
+                alertPublisherProvider, properties, logSanitizer, auditProvider);
+        scheduler.getListenerManager().addJobListener(listener);
+        return listener;
     }
 }

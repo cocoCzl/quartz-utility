@@ -1,7 +1,7 @@
 package io.github.cococzl.coquartz.config;
 
 import io.github.cococzl.coquartz.actuator.CoQuartzEndpoint;
-import io.github.cococzl.coquartz.service.AsyncTaskLogService;
+import io.github.cococzl.coquartz.service.TaskExecutionLogWriter;
 import io.github.cococzl.coquartz.service.TaskMonitoringService;
 import io.github.cococzl.coquartz.service.TaskQueryService;
 import io.github.cococzl.coquartz.service.TaskLogRepository;
@@ -18,7 +18,7 @@ import org.springframework.context.annotation.Bean;
 public class CoQuartzActuatorAutoConfiguration {
     @Bean
     public CoQuartzEndpoint coQuartzEndpoint(TaskQueryService taskQueryService,
-                                              ObjectProvider<AsyncTaskLogService> pipeline,
+                                              ObjectProvider<TaskExecutionLogWriter> pipeline,
                                               ObjectProvider<TaskMonitoringService> monitoring,
                                               ObjectProvider<TaskLogRepository> repository) {
         return new CoQuartzEndpoint(taskQueryService, pipeline, monitoring, repository);

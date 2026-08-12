@@ -10,6 +10,7 @@ import io.github.cococzl.coquartz.service.AsyncTaskLogService;
 import io.github.cococzl.coquartz.service.DefaultLogSanitizer;
 import io.github.cococzl.coquartz.service.LogSanitizer;
 import io.github.cococzl.coquartz.service.ReliableAuditService;
+import io.github.cococzl.coquartz.service.TaskExecutionLogWriter;
 import org.quartz.*;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -24,7 +25,7 @@ public class EnhancedJob implements Job {
 
     private final Job delegate;
     private final JobDataMap enhancedConfig;
-    private final AsyncTaskLogService asyncTaskLogService;
+    private final TaskExecutionLogWriter logWriter;
     private final ExecutorService timeoutExecutor;
     private final AlertEventPublisher alertEventPublisher;
     private final CoQuartzProperties properties;
@@ -54,6 +55,25 @@ public class EnhancedJob implements Job {
     }
 
     public EnhancedJob(Job delegate, JobDataMap enhancedConfig,
+                       TaskExecutionLogWriter logWriter,
+                       ExecutorService timeoutExecutor,
+                       AlertEventPublisher alertEventPublisher,
+                       CoQuartzProperties properties,
+                       CoQuartzMetrics metrics,
+                       LogSanitizer logSanitizer,
+                       ReliableAuditService reliableAuditService) {
+        this.delegate = delegate;
+        this.enhancedConfig = enhancedConfig;
+        this.logWriter = logWriter;
+        this.timeoutExecutor = timeoutExecutor;
+        this.alertEventPublisher = alertEventPublisher;
+        this.properties = properties;
+        this.metrics = metrics;
+        this.logSanitizer = logSanitizer == null ? new DefaultLogSanitizer() : logSanitizer;
+        this.reliableAuditService = reliableAuditService;
+    }
+
+    public EnhancedJob(Job delegate, JobDataMap enhancedConfig,
                        AsyncTaskLogService asyncTaskLogService,
                        ExecutorService timeoutExecutor,
                        AlertEventPublisher alertEventPublisher,
@@ -63,7 +83,7 @@ public class EnhancedJob implements Job {
                        ReliableAuditService reliableAuditService) {
         this.delegate = delegate;
         this.enhancedConfig = enhancedConfig;
-        this.asyncTaskLogService = asyncTaskLogService;
+        this.logWriter = asyncTaskLogService;
         this.timeoutExecutor = timeoutExecutor;
         this.alertEventPublisher = alertEventPublisher;
         this.properties = properties;
@@ -245,8 +265,8 @@ public class EnhancedJob implements Job {
 
     private void logExecution(TaskExecutionLog taskLog) {
         try {
-            if (asyncTaskLogService != null) {
-                asyncTaskLogService.logTaskExecutionAsync(taskLog);
+            if (logWriter != null) {
+                logWriter.write(taskLog);
             }
         } catch (Exception e) {
             log.error("Failed to log task execution for job: {}", taskLog.getJobKey(), e);

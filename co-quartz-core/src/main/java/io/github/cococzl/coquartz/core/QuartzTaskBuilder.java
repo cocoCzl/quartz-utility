@@ -157,7 +157,10 @@ public class QuartzTaskBuilder {
 
             if (scheduler.checkExists(jobDetail.getKey())) {
                 scheduler.addJob(jobDetail, true);
-                scheduler.rescheduleJob(trigger.getKey(), trigger);
+                Date rescheduled = scheduler.rescheduleJob(trigger.getKey(), trigger);
+                if (rescheduled == null) {
+                    return scheduler.scheduleJob(trigger);
+                }
             } else {
                 return scheduler.scheduleJob(jobDetail, trigger);
             }
@@ -189,7 +192,7 @@ public class QuartzTaskBuilder {
                     .build();
 
             if (!scheduler.checkExists(jobDetail.getKey())) {
-                scheduler.addJob(jobDetail, true);
+                return scheduler.scheduleJob(jobDetail, trigger);
             }
             return scheduler.scheduleJob(trigger);
         } catch (SchedulerException e) {

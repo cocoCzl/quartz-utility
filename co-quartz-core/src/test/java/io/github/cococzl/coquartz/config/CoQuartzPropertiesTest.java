@@ -11,7 +11,7 @@ class CoQuartzPropertiesTest {
         CoQuartzProperties properties = new CoQuartzProperties();
         CoQuartzProperties.LogConfig log = properties.getLog();
 
-        assertThat(log.isEnabled()).isTrue();
+        assertThat(log.isEnabled()).isFalse();
         assertThat(log.getRetentionDays()).isEqualTo(30);
         assertThat(log.getCleanupCron()).isEqualTo("0 0 2 * * ?");
         assertThat(log.isAutoCreateTable()).isFalse();
@@ -76,5 +76,25 @@ class CoQuartzPropertiesTest {
         assertThat(properties.getLog().isEnabled()).isFalse();
         assertThat(properties.getMonitoring().getConsecutiveFailureThreshold()).isEqualTo(5);
         assertThat(properties.getTimeoutPool().getCoreSize()).isEqualTo(4);
+    }
+
+    @Test
+    void reliableAuditRequiresLogging() {
+        CoQuartzProperties properties = new CoQuartzProperties();
+        properties.getLog().setReliableAudit(true);
+        assertThatThrownBy(properties::afterPropertiesSet)
+                .hasMessageContaining("requires co-quartz.log.enabled=true");
+    }
+
+    @Test
+    void validatesPoolAndTimeZone() {
+        CoQuartzProperties properties = new CoQuartzProperties();
+        properties.getTimeoutPool().setCoreSize(5);
+        properties.getTimeoutPool().setMaxSize(2);
+        assertThatThrownBy(properties::afterPropertiesSet).hasMessageContaining("max-size");
+
+        properties = new CoQuartzProperties();
+        properties.getScheduling().setDefaultTimeZone("Not/AZone");
+        assertThatThrownBy(properties::afterPropertiesSet).hasMessageContaining("default-time-zone");
     }
 }

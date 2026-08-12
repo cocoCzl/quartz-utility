@@ -205,6 +205,19 @@ class QuartzTaskBuilderTest {
     }
 
     @Test
+    void schedule_existingJobWithoutTrigger_createsTrigger() throws Exception {
+        Scheduler scheduler = mock(Scheduler.class);
+        when(scheduler.checkExists(any(JobKey.class))).thenReturn(true);
+        when(scheduler.rescheduleJob(any(TriggerKey.class), any(Trigger.class))).thenReturn(null);
+        when(scheduler.scheduleJob(any(Trigger.class))).thenReturn(new Date());
+
+        QuartzTaskBuilder.newBuilder().jobClass(SampleJob.class).jobName("testJob")
+                .cron("0 0 * * * ?").schedule(scheduler);
+
+        verify(scheduler).scheduleJob(any(Trigger.class));
+    }
+
+    @Test
     void schedule_newJob_schedules() throws Exception {
         Scheduler scheduler = mock(Scheduler.class);
         when(scheduler.checkExists(any(JobKey.class))).thenReturn(false);
@@ -223,15 +236,14 @@ class QuartzTaskBuilderTest {
     void executeNow_schedulesImmediately() throws Exception {
         Scheduler scheduler = mock(Scheduler.class);
         when(scheduler.checkExists(any(JobKey.class))).thenReturn(false);
-        when(scheduler.scheduleJob(any(Trigger.class))).thenReturn(new Date());
+        when(scheduler.scheduleJob(any(JobDetail.class), any(Trigger.class))).thenReturn(new Date());
 
         QuartzTaskBuilder.newBuilder()
                 .jobClass(SampleJob.class)
                 .jobName("testJob")
                 .executeNow(scheduler);
 
-        verify(scheduler).addJob(any(JobDetail.class), eq(true));
-        verify(scheduler).scheduleJob(any(Trigger.class));
+        verify(scheduler).scheduleJob(any(JobDetail.class), any(Trigger.class));
     }
 
     @Test

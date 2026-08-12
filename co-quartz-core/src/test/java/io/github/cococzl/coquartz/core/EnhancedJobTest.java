@@ -87,7 +87,7 @@ class EnhancedJobTest {
         job.execute(context);
 
         verify(delegate).execute(context);
-        verify(asyncTaskLogService).logTaskExecutionAsync(argThat(log ->
+        verify(asyncTaskLogService).write(argThat(log ->
                 log.getExecState() == LogTaskExecStateEnum.SUCCESS &&
                 log.getAttempt() == 1 &&
                 log.isFinalAttempt()
@@ -107,7 +107,7 @@ class EnhancedJobTest {
                 .isInstanceOf(JobExecutionException.class)
                 .hasMessage("test error");
 
-        verify(asyncTaskLogService).logTaskExecutionAsync(argThat(log ->
+        verify(asyncTaskLogService).write(argThat(log ->
                 log.getExecState() == LogTaskExecStateEnum.FAIL &&
                 log.getAttempt() == 1 &&
                 log.isFinalAttempt() &&
@@ -136,7 +136,7 @@ class EnhancedJobTest {
         assertThat(retryTrigger.getValue().getStartTime()).isNotNull();
 
         ArgumentCaptor<TaskExecutionLog> logCaptor = ArgumentCaptor.forClass(TaskExecutionLog.class);
-        verify(asyncTaskLogService).logTaskExecutionAsync(logCaptor.capture());
+        verify(asyncTaskLogService).write(logCaptor.capture());
 
         var logs = logCaptor.getAllValues();
         assertThat(logs.get(0).getExecState()).isEqualTo(LogTaskExecStateEnum.FAIL);
@@ -174,7 +174,7 @@ class EnhancedJobTest {
         verify(scheduler).scheduleJob(any(Trigger.class));
 
         ArgumentCaptor<TaskExecutionLog> logCaptor = ArgumentCaptor.forClass(TaskExecutionLog.class);
-        verify(asyncTaskLogService).logTaskExecutionAsync(logCaptor.capture());
+        verify(asyncTaskLogService).write(logCaptor.capture());
 
         var logs = logCaptor.getAllValues();
         assertThat(logs).allMatch(log -> log.getExecState() == LogTaskExecStateEnum.FAIL);
@@ -257,7 +257,7 @@ class EnhancedJobTest {
             assertThat(e.getMessage()).startsWith("Task timed out");
         }
 
-        verify(asyncTaskLogService).logTaskExecutionAsync(argThat(log ->
+        verify(asyncTaskLogService).write(argThat(log ->
                 log.getExecState() == LogTaskExecStateEnum.FAIL
         ));
         verify(alertEventPublisher).publishTimeout(eq("DEFAULT.testJob"), eq(1L), anyBoolean());
@@ -271,7 +271,7 @@ class EnhancedJobTest {
 
         assertThatThrownBy(() -> createEnhancedJob().execute(context)).isInstanceOf(JobExecutionException.class);
 
-        verify(asyncTaskLogService).logTaskExecutionAsync(argThat(log ->
+        verify(asyncTaskLogService).write(argThat(log ->
                 log.getStackTrace() == null && "token=***".equals(log.getErrorMessage())));
         verify(alertEventPublisher).publishFailure("DEFAULT.testJob", "token=***", null);
     }
@@ -286,7 +286,7 @@ class EnhancedJobTest {
 
         assertThatThrownBy(() -> job.execute(context)).isInstanceOf(JobExecutionException.class);
 
-        verify(asyncTaskLogService).logTaskExecutionAsync(argThat(log ->
+        verify(asyncTaskLogService).write(argThat(log ->
                 "sanitized".equals(log.getErrorMessage()) && "sanitized".equals(log.getStackTrace())));
         verify(alertEventPublisher).publishFailure("DEFAULT.testJob", "sanitized", "sanitized");
     }
@@ -305,7 +305,7 @@ class EnhancedJobTest {
         inOrder.verify(delegate).execute(context);
         inOrder.verify(reliableAuditService).recordCompleted(argThat((TaskExecutionLog log) ->
                 log.getExecState() == LogTaskExecStateEnum.SUCCESS && log.getEndTime() != null));
-        verify(asyncTaskLogService, never()).logTaskExecutionAsync(any());
+        verify(asyncTaskLogService, never()).write(any());
     }
 
     @Test

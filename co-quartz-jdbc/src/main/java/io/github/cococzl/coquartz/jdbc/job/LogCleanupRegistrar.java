@@ -13,12 +13,10 @@ public class LogCleanupRegistrar {
     private static final Logger log = LoggerFactory.getLogger(LogCleanupRegistrar.class);
 
     private final Scheduler scheduler;
-    private final TaskLogRepository taskLogRepository;
     private final CoQuartzProperties properties;
 
-    public LogCleanupRegistrar(Scheduler scheduler, TaskLogRepository taskLogRepository, CoQuartzProperties properties) {
+    public LogCleanupRegistrar(Scheduler scheduler, CoQuartzProperties properties) {
         this.scheduler = scheduler;
-        this.taskLogRepository = taskLogRepository;
         this.properties = properties;
     }
 
@@ -36,7 +34,6 @@ public class LogCleanupRegistrar {
             }
 
             JobDataMap jobDataMap = new JobDataMap();
-            jobDataMap.put("taskLogRepository", taskLogRepository);
             jobDataMap.put(LogCleanupJob.RETENTION_DAYS_KEY, properties.getLog().getRetentionDays());
 
             JobDetail jobDetail = JobBuilder.newJob(LogCleanupJob.class)
@@ -59,6 +56,8 @@ public class LogCleanupRegistrar {
 
             scheduler.scheduleJob(jobDetail, trigger);
             log.info("Co-Quartz log cleanup job registered with cron: {}", cronExpression);
+        } catch (ObjectAlreadyExistsException e) {
+            log.info("Co-Quartz log cleanup job was registered by another scheduler node");
         } catch (SchedulerException e) {
             log.error("Failed to register Co-Quartz log cleanup job", e);
         }

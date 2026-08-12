@@ -52,12 +52,14 @@ public class AlertEventPublisher {
     }
 
     public void publishSlowTask(String jobKey, long executionTimeMs, long thresholdMs) {
+        if (!properties.getMonitoring().isEnabled()) return;
         dispatch(() -> {
             eventPublisher.publishEvent(new TaskSlowEvent(this, jobKey, executionTimeMs, thresholdMs));
         }, "TaskSlowEvent", jobKey);
     }
 
     public void publishConsecutiveFailureIfNeeded(String jobKey) {
+        if (!properties.getMonitoring().isEnabled()) return;
         int threshold = properties.getMonitoring().getConsecutiveFailureThreshold();
         FailureWindow window = failureWindows.computeIfAbsent(jobKey, ignored -> new FailureWindow());
         int failures = window.failures.incrementAndGet();

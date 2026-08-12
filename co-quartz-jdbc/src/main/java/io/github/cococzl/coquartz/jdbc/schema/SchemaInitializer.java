@@ -119,10 +119,22 @@ public class SchemaInitializer {
     }
 
     private void createIndex(String index, String columns) {
-        try {
-            jdbcTemplate.execute("CREATE INDEX " + index + " ON quartz_task_log (" + columns + ")");
-        } catch (Exception ignored) {
-            // Existing installations may already have the index; V2 is deliberately idempotent.
+        if (!indexExists(index)) jdbcTemplate.execute("CREATE INDEX " + index + " ON quartz_task_log (" + columns + ")");
+    }
+
+    private boolean indexExists(String index) {
+        try (Connection connection = jdbcTemplate.getDataSource().getConnection()) {
+            DatabaseMetaData metadata = connection.getMetaData();
+            for (String table : new String[] {"quartz_task_log", "QUARTZ_TASK_LOG"}) {
+                try (var indexes = metadata.getIndexInfo(connection.getCatalog(), null, table, false, false)) {
+                    while (indexes.next()) {
+                        if (index.equalsIgnoreCase(indexes.getString("INDEX_NAME"))) return true;
+                    }
+                }
+            }
+            return false;
+        } catch (Exception e) {
+            throw new IllegalStateException("Failed to inspect Co-Quartz log indexes", e);
         }
     }
 

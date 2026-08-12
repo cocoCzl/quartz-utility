@@ -67,7 +67,7 @@ class CoQuartzJobListenerTest {
         listener.jobWasExecuted(context, null);
 
         ArgumentCaptor<TaskExecutionLog> logCaptor = ArgumentCaptor.forClass(TaskExecutionLog.class);
-        verify(asyncTaskLogService).logTaskExecutionAsync(logCaptor.capture());
+        verify(asyncTaskLogService).write(logCaptor.capture());
         TaskExecutionLog log = logCaptor.getValue();
         assertThat(log.getExecState()).isEqualTo(LogTaskExecStateEnum.SUCCESS);
         assertThat(log.getAttempt()).isEqualTo(1);
@@ -90,7 +90,7 @@ class CoQuartzJobListenerTest {
         listener.jobWasExecuted(context, exception);
 
         ArgumentCaptor<TaskExecutionLog> logCaptor = ArgumentCaptor.forClass(TaskExecutionLog.class);
-        verify(asyncTaskLogService).logTaskExecutionAsync(logCaptor.capture());
+        verify(asyncTaskLogService).write(logCaptor.capture());
         TaskExecutionLog log = logCaptor.getValue();
         assertThat(log.getExecState()).isEqualTo(LogTaskExecStateEnum.FAIL);
         assertThat(log.getErrorMessage()).isEqualTo("test failure");

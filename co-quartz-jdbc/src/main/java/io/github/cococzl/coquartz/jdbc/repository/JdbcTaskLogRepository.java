@@ -202,18 +202,9 @@ public class JdbcTaskLogRepository implements TaskLogRepository {
 
     @Override
     public int cleanup(int daysToKeep) {
-        String dialect = detectDialect();
-        String sql;
-        if (dialect.contains("postgresql")) {
-            sql = "DELETE FROM quartz_task_log WHERE execute_time < CURRENT_TIMESTAMP - INTERVAL '" + daysToKeep + " days'";
-        } else if (dialect.contains("mysql")) {
-            sql = "DELETE FROM quartz_task_log WHERE execute_time < DATE_SUB(NOW(), INTERVAL ? DAY)";
-            return jdbcTemplate.update(sql, daysToKeep);
-        } else {
-            sql = "DELETE FROM quartz_task_log WHERE execute_time < DATEADD(DAY, -?, CURRENT_TIMESTAMP)";
-            return jdbcTemplate.update(sql, daysToKeep);
-        }
-        return jdbcTemplate.update(sql);
+        LocalDateTime cutoff = java.time.Instant.now().minus(java.time.Duration.ofDays(daysToKeep))
+                .atZone(java.time.ZoneOffset.UTC).toLocalDateTime();
+        return jdbcTemplate.update("DELETE FROM quartz_task_log WHERE execute_time < ?", cutoff);
     }
 
     @Override

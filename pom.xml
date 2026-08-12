@@ -12,6 +12,31 @@
   <description>Spring Boot Starter for Quartz scheduling with automatic logging, retry, timeout, and alerting</description>
   <url>https://github.com/cococzl/quartz-utility</url>
 
+  <licenses>
+    <license>
+      <name>Apache License, Version 2.0</name>
+      <url>https://www.apache.org/licenses/LICENSE-2.0.txt</url>
+      <distribution>repo</distribution>
+    </license>
+  </licenses>
+  <developers>
+    <developer>
+      <id>cocoCzl</id>
+      <name>cocoCzl</name>
+      <url>https://github.com/cocoCzl</url>
+    </developer>
+  </developers>
+  <scm>
+    <connection>scm:git:https://github.com/cocoCzl/quartz-utility.git</connection>
+    <developerConnection>scm:git:ssh://git@github.com/cocoCzl/quartz-utility.git</developerConnection>
+    <url>https://github.com/cocoCzl/quartz-utility</url>
+    <tag>HEAD</tag>
+  </scm>
+  <issueManagement>
+    <system>GitHub</system>
+    <url>https://github.com/cocoCzl/quartz-utility/issues</url>
+  </issueManagement>
+
   <modules>
     <module>co-quartz-core</module>
     <module>co-quartz-jdbc</module>
@@ -58,5 +83,44 @@
       </plugins>
     </pluginManagement>
   </build>
+
+  <profiles>
+    <profile>
+      <id>release</id>
+      <build>
+        <plugins>
+          <plugin>
+            <groupId>org.apache.maven.plugins</groupId>
+            <artifactId>maven-source-plugin</artifactId>
+            <version>3.3.1</version>
+            <configuration><excludeResources>true</excludeResources><forceCreation>true</forceCreation></configuration>
+            <executions><execution><id>attach-sources</id><goals><goal>jar-no-fork</goal></goals></execution></executions>
+          </plugin>
+          <plugin>
+            <groupId>org.apache.maven.plugins</groupId>
+            <artifactId>maven-javadoc-plugin</artifactId>
+            <version>3.11.2</version>
+            <configuration><doclint>none</doclint><failOnNoPublicClasses>false</failOnNoPublicClasses></configuration>
+            <executions><execution><id>attach-javadocs</id><goals><goal>jar</goal></goals></execution></executions>
+          </plugin>
+          <plugin>
+            <groupId>org.apache.maven.plugins</groupId>
+            <artifactId>maven-gpg-plugin</artifactId>
+            <version>3.2.7</version>
+            <executions><execution><id>sign-artifacts</id><phase>verify</phase><goals><goal>sign</goal></goals>
+              <configuration><gpgArguments><arg>--batch</arg><arg>--pinentry-mode</arg><arg>loopback</arg></gpgArguments></configuration>
+            </execution></executions>
+          </plugin>
+          <plugin>
+            <groupId>org.sonatype.central</groupId>
+            <artifactId>central-publishing-maven-plugin</artifactId>
+            <version>0.8.0</version>
+            <extensions>true</extensions>
+            <configuration><publishingServerId>central</publishingServerId><autoPublish>true</autoPublish></configuration>
+          </plugin>
+        </plugins>
+      </build>
+    </profile>
+  </profiles>
 
 </project>

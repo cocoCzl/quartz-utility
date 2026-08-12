@@ -33,6 +33,11 @@
     <dependency>
       <groupId>org.quartz-scheduler</groupId>
       <artifactId>quartz</artifactId>
+      <exclusions>
+        <exclusion><groupId>com.mchange</groupId><artifactId>c3p0</artifactId></exclusion>
+        <exclusion><groupId>com.mchange</groupId><artifactId>mchange-commons-java</artifactId></exclusion>
+        <exclusion><groupId>com.zaxxer</groupId><artifactId>HikariCP-java7</artifactId></exclusion>
+      </exclusions>
     </dependency>
 
     <dependency>
@@ -44,7 +49,6 @@
     <dependency>
       <groupId>io.micrometer</groupId>
       <artifactId>micrometer-core</artifactId>
-      <version>1.14.6</version>
       <optional>true</optional>
     </dependency>
 
@@ -69,6 +73,12 @@
     <dependency>
       <groupId>com.h2database</groupId>
       <artifactId>h2</artifactId>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>com.mchange</groupId>
+      <artifactId>c3p0</artifactId>
+      <version>0.9.5.4</version>
       <scope>test</scope>
     </dependency>
   </dependencies>

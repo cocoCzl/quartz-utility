@@ -7,6 +7,7 @@ import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.datasource.embedded.EmbeddedDatabaseBuilder;
 import org.springframework.jdbc.datasource.embedded.EmbeddedDatabaseType;
 import javax.sql.DataSource;
+import org.springframework.beans.factory.support.DefaultListableBeanFactory;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -43,8 +44,11 @@ class SchemaInitializerTest {
         properties.getLog().getDatasource().setUrl("jdbc:h2:mem:isolated_log_" + System.nanoTime() + ";DB_CLOSE_DELAY=-1");
         properties.getLog().getDatasource().setDriverClassName("org.h2.Driver");
         CoQuartzJdbcAutoConfiguration configuration = new CoQuartzJdbcAutoConfiguration();
-        DataSource logDataSource = configuration.coQuartzLogDataSource(application.getDataSource(), properties);
-        JdbcTemplate log = configuration.coQuartzJdbcTemplate(logDataSource);
+        DataSource logDataSource = configuration.coQuartzLogDataSource(properties);
+        DefaultListableBeanFactory beanFactory = new DefaultListableBeanFactory();
+        beanFactory.registerSingleton("coQuartzLogDataSource", logDataSource);
+        JdbcTemplate log = configuration.coQuartzJdbcTemplate(
+                beanFactory.getBeanProvider(DataSource.class), beanFactory.getBeanProvider(DataSource.class));
 
         new SchemaInitializer(log, properties).initialize();
 

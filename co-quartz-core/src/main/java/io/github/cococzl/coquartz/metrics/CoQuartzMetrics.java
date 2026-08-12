@@ -5,7 +5,7 @@ import io.micrometer.core.instrument.MeterRegistry;
 import io.micrometer.core.instrument.Timer;
 import io.micrometer.core.instrument.Gauge;
 import io.github.cococzl.coquartz.dto.AsyncLogPipelineStatus;
-import io.github.cococzl.coquartz.service.AsyncTaskLogService;
+import io.github.cococzl.coquartz.service.TaskExecutionLogWriter;
 import io.github.cococzl.coquartz.service.TaskLogRepository;
 
 import java.util.concurrent.TimeUnit;
@@ -78,7 +78,7 @@ public class CoQuartzMetrics {
         return "other";
     }
 
-    public void bindLogPipeline(AsyncTaskLogService pipeline) {
+    public void bindLogPipeline(TaskExecutionLogWriter pipeline) {
         Gauge.builder("co_quartz_log_queue_size", pipeline, p -> p.getPipelineStatus().queueSize()).register(meterRegistry);
         Gauge.builder("co_quartz_log_dropped", pipeline, p -> p.getPipelineStatus().droppedCount()).register(meterRegistry);
         Gauge.builder("co_quartz_log_write_failures", pipeline, p -> p.getPipelineStatus().writeFailureCount()).register(meterRegistry);

@@ -3,7 +3,7 @@ package io.github.cococzl.coquartz.actuator;
 import io.github.cococzl.coquartz.dto.AsyncLogPipelineStatus;
 import io.github.cococzl.coquartz.dto.TaskExecutionLog;
 import io.github.cococzl.coquartz.dto.TaskInfo;
-import io.github.cococzl.coquartz.service.AsyncTaskLogService;
+import io.github.cococzl.coquartz.service.TaskExecutionLogWriter;
 import io.github.cococzl.coquartz.service.TaskMonitoringService;
 import io.github.cococzl.coquartz.service.TaskQueryService;
 import io.github.cococzl.coquartz.service.TaskLogRepository;
@@ -18,16 +18,16 @@ import java.util.Map;
 @Endpoint(id = "coquartz")
 public class CoQuartzEndpoint {
     private final TaskQueryService taskQueryService;
-    private final ObjectProvider<AsyncTaskLogService> logPipeline;
+    private final ObjectProvider<TaskExecutionLogWriter> logPipeline;
     private final ObjectProvider<TaskMonitoringService> monitoring;
     private final ObjectProvider<TaskLogRepository> repository;
 
-    public CoQuartzEndpoint(TaskQueryService taskQueryService, ObjectProvider<AsyncTaskLogService> logPipeline,
+    public CoQuartzEndpoint(TaskQueryService taskQueryService, ObjectProvider<TaskExecutionLogWriter> logPipeline,
                             ObjectProvider<TaskMonitoringService> monitoring) {
         this(taskQueryService, logPipeline, monitoring, null);
     }
 
-    public CoQuartzEndpoint(TaskQueryService taskQueryService, ObjectProvider<AsyncTaskLogService> logPipeline,
+    public CoQuartzEndpoint(TaskQueryService taskQueryService, ObjectProvider<TaskExecutionLogWriter> logPipeline,
                             ObjectProvider<TaskMonitoringService> monitoring, ObjectProvider<TaskLogRepository> repository) {
         this.taskQueryService = taskQueryService;
         this.logPipeline = logPipeline;
@@ -38,7 +38,7 @@ public class CoQuartzEndpoint {
     @ReadOperation
     public Map<String, Object> summary() throws Exception {
         List<Map<String, Object>> tasks = taskQueryService.listJobs().stream().map(this::task).toList();
-        AsyncTaskLogService pipeline = logPipeline.getIfAvailable();
+        TaskExecutionLogWriter pipeline = logPipeline.getIfAvailable();
         AsyncLogPipelineStatus pipelineStatus = pipeline == null ? null : pipeline.getPipelineStatus();
         TaskMonitoringService taskMonitoring = monitoring.getIfAvailable();
         List<Map<String, Object>> recentFailures = taskMonitoring == null ? List.of()

@@ -1,9 +1,13 @@
 package io.github.cococzl.coquartz.config;
 
 import org.springframework.boot.context.properties.ConfigurationProperties;
+import org.springframework.beans.factory.InitializingBean;
+import io.github.cococzl.coquartz.exception.CoQuartzConfigurationException;
+import org.quartz.CronExpression;
+import java.time.ZoneId;
 
 @ConfigurationProperties(prefix = "co-quartz")
-public class CoQuartzProperties {
+public class CoQuartzProperties implements InitializingBean {
 
     private LogConfig log = new LogConfig();
     private AsyncConfig async = new AsyncConfig();
@@ -61,7 +65,7 @@ public class CoQuartzProperties {
     }
 
     public static class LogConfig {
-        private boolean enabled = true;
+        private boolean enabled = false;
         private int retentionDays = 30;
         private String cleanupCron = "0 0 2 * * ?";
         /** Development convenience only; production installations should run the versioned scripts explicitly. */
@@ -169,5 +173,36 @@ public class CoQuartzProperties {
 
         public String getDefaultTimeZone() { return defaultTimeZone; }
         public void setDefaultTimeZone(String defaultTimeZone) { this.defaultTimeZone = defaultTimeZone; }
+    }
+
+    @Override
+    public void afterPropertiesSet() {
+        require(log.retentionDays > 0, "co-quartz.log.retention-days must be greater than 0");
+        require(CronExpression.isValidExpression(log.cleanupCron), "co-quartz.log.cleanup-cron must be a valid Quartz cron expression");
+        require(!log.reliableAudit || log.enabled, "co-quartz.log.reliable-audit requires co-quartz.log.enabled=true");
+        require(log.reliableAuditRecoveryThresholdMs > 0, "co-quartz.log.reliable-audit-recovery-threshold-ms must be greater than 0");
+        require(async.logQueueCapacity > 0, "co-quartz.async.log-queue-capacity must be greater than 0");
+        require(async.logBatchSize > 0 && async.logBatchSize <= async.logQueueCapacity,
+                "co-quartz.async.log-batch-size must be between 1 and log-queue-capacity");
+        require(async.logFlushIntervalMs > 0, "co-quartz.async.log-flush-interval-ms must be greater than 0");
+        require(async.shutdownFlushTimeoutMs >= 0, "co-quartz.async.shutdown-flush-timeout-ms must not be negative");
+        require(async.logWriteMaxRetries >= 0, "co-quartz.async.log-write-max-retries must not be negative");
+        require(monitoring.slowTaskThresholdMs >= 0, "co-quartz.monitoring.slow-task-threshold-ms must not be negative");
+        require(monitoring.consecutiveFailureThreshold > 0, "co-quartz.monitoring.consecutive-failure-threshold must be greater than 0");
+        require(monitoring.maxMetricJobTags >= 0, "co-quartz.monitoring.max-metric-job-tags must not be negative");
+        require(timeoutPool.coreSize > 0, "co-quartz.timeout-pool.core-size must be greater than 0");
+        require(timeoutPool.maxSize >= timeoutPool.coreSize,
+                "co-quartz.timeout-pool.max-size must be greater than or equal to core-size");
+        require(timeoutPool.shutdownAwaitMs >= 0, "co-quartz.timeout-pool.shutdown-await-ms must not be negative");
+        try {
+            ZoneId.of(scheduling.defaultTimeZone);
+        } catch (Exception e) {
+            throw new CoQuartzConfigurationException("co-quartz.scheduling.default-time-zone is invalid: "
+                    + scheduling.defaultTimeZone, e);
+        }
+    }
+
+    private static void require(boolean condition, String message) {
+        if (!condition) throw new CoQuartzConfigurationException(message);
     }
 }

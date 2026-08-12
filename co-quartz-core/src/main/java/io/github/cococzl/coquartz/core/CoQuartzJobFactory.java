@@ -7,6 +7,7 @@ import io.github.cococzl.coquartz.service.AsyncTaskLogService;
 import io.github.cococzl.coquartz.service.DefaultLogSanitizer;
 import io.github.cococzl.coquartz.service.LogSanitizer;
 import io.github.cococzl.coquartz.service.ReliableAuditService;
+import io.github.cococzl.coquartz.service.TaskExecutionLogWriter;
 import org.quartz.*;
 import org.quartz.spi.TriggerFiredBundle;
 import org.slf4j.Logger;
@@ -23,6 +24,7 @@ public class CoQuartzJobFactory extends SpringBeanJobFactory {
 
     private AutowireCapableBeanFactory beanFactory;
     private ObjectProvider<AsyncTaskLogService> asyncTaskLogServiceProvider;
+    private ObjectProvider<TaskExecutionLogWriter> taskExecutionLogWriterProvider;
     private ExecutorService timeoutExecutor;
     private ObjectProvider<AlertEventPublisher> alertEventPublisherProvider;
     private CoQuartzProperties properties;
@@ -39,6 +41,10 @@ public class CoQuartzJobFactory extends SpringBeanJobFactory {
 
     public void setAsyncTaskLogServiceProvider(ObjectProvider<AsyncTaskLogService> provider) {
         this.asyncTaskLogServiceProvider = provider;
+    }
+
+    public void setTaskExecutionLogWriterProvider(ObjectProvider<TaskExecutionLogWriter> provider) {
+        this.taskExecutionLogWriterProvider = provider;
     }
 
     public void setTimeoutExecutor(ExecutorService timeoutExecutor) {
@@ -74,16 +80,20 @@ public class CoQuartzJobFactory extends SpringBeanJobFactory {
             beanFactory.autowireBean(job);
         }
 
-        AsyncTaskLogService asyncTaskLogService = asyncTaskLogServiceProvider != null ? asyncTaskLogServiceProvider.getIfAvailable() : null;
+        TaskExecutionLogWriter logWriter = taskExecutionLogWriterProvider != null
+                ? taskExecutionLogWriterProvider.getIfAvailable() : null;
+        if (logWriter == null && asyncTaskLogServiceProvider != null) {
+            logWriter = asyncTaskLogServiceProvider.getIfAvailable();
+        }
         AlertEventPublisher alertEventPublisher = alertEventPublisherProvider != null ? alertEventPublisherProvider.getIfAvailable() : null;
         CoQuartzMetrics metrics = metricsProvider != null ? metricsProvider.getIfAvailable() : null;
         LogSanitizer logSanitizer = logSanitizerProvider != null ? logSanitizerProvider.getIfAvailable() : new DefaultLogSanitizer();
         ReliableAuditService reliableAuditService = reliableAuditServiceProvider != null
                 ? reliableAuditServiceProvider.getIfAvailable() : null;
 
-        if (isEnhancedJob(jobDataMap) && asyncTaskLogService != null && timeoutExecutor != null) {
+        if (isEnhancedJob(jobDataMap) && timeoutExecutor != null) {
             log.debug("Wrapping job {} with EnhancedJob", bundle.getJobDetail().getKey());
-            return new EnhancedJob((Job) job, jobDataMap, asyncTaskLogService, timeoutExecutor, alertEventPublisher,
+            return new EnhancedJob((Job) job, jobDataMap, logWriter, timeoutExecutor, alertEventPublisher,
                     properties, metrics, logSanitizer, reliableAuditService);
         }
 

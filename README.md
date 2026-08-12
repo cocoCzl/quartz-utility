@@ -47,6 +47,16 @@ Co-Quartz 适用于需要在单机或 Quartz JDBC 集群中稳定运行定时任
 
 发布版本请以 Maven Central 中的最新稳定版本替换 `2.1.0-SNAPSHOT`。
 
+Starter 默认只包含调度核心，不要求应用提供数据库。需要执行日志时再添加 JDBC 模块：
+
+```xml
+<dependency>
+  <groupId>io.github.cococzl</groupId>
+  <artifactId>co-quartz-jdbc</artifactId>
+  <version>2.1.0-SNAPSHOT</version>
+</dependency>
+```
+
 ### 2. 定义声明式任务（推荐）
 
 在普通 Spring Bean 的 `public void` 无参方法上添加 `@QuartzTask`：
@@ -130,7 +140,7 @@ co-quartz:
   scheduling:
     default-time-zone: UTC
   log:
-    enabled: true
+    enabled: false # 默认关闭；执行数据库迁移后再开启
     retention-days: 30
     cleanup-cron: "0 0 2 * * ?"
     auto-create-table: false # production default; enable only for local development
@@ -160,6 +170,9 @@ co-quartz:
   annotation:
     enabled: true
 ```
+
+`co-quartz.async.enabled: false` 表示同步写执行日志，不表示关闭日志。关闭日志只需设置
+`co-quartz.log.enabled: false`。`co-quartz.monitoring.enabled: false` 会关闭 Micrometer 指标、慢任务告警和连续失败告警，但保留基础失败/超时事件。
 
 时区规则：任务显式 `timeZone` 优先，否则使用 `co-quartz.scheduling.default-time-zone`；默认值为 `UTC`，不会读取 JVM 或服务器默认时区。固定间隔按绝对时长运行，不受时区或夏令时影响。
 
@@ -191,7 +204,8 @@ spring:
       org.quartz.jobStore.clusterCheckinInterval: 10000
 ```
 
-默认日志模式异步尽力写入，不影响业务任务。对审计完整性有要求时可启用可靠审计：
+执行日志默认关闭，不影响重试、超时和基础失败事件。添加 `co-quartz-jdbc`、执行迁移并设置
+`co-quartz.log.enabled: true` 后，默认使用异步尽力写入。对审计完整性有要求时可启用可靠审计：
 
 ```yaml
 co-quartz:
@@ -293,7 +307,8 @@ Micrometer 存在时自动注册以下指标：`co_quartz_job_executions_total`�
 | `TaskQueryService` | core | 任务查询：列表/详情/运行中/触发状态 |
 | `QuartzTaskBuilder` | core | 流式构建动态任务 |
 | `TaskLogRepository` | core (接口) | 日志持久化接口 |
-| `AsyncTaskLogService` | core (接口) | 异步批量日志写入接口 |
+| `TaskExecutionLogWriter` | core (接口) | 同步/异步无关的执行日志写入扩展点 |
+| `AsyncTaskLogService` | core (兼容接口) | 旧版异步日志 API，后续版本将逐步废弃 |
 | `TaskMonitoringService` | core (接口) | 监控统计接口 |
 | `TaskLogService` | jdbc | 分页查询、统计、清理 |
 | `AlertEventPublisher` | core | 告警事件发布 |
@@ -306,7 +321,7 @@ co-quartz/
 │                         # 告警、指标、Actuator 端点、服务接口与 JobFactory
 ├── co-quartz-jdbc/       # TaskLogRepository / AsyncTaskLogService 的 JDBC 实现、
 │                         # 数据库迁移、可靠审计、日志清理与查询服务
-└── co-quartz-starter/    # 面向应用接入的 Starter 聚合模块
+└── co-quartz-starter/    # 默认只聚合 core；日志场景显式添加 JDBC 模块
 ```
 
 ## 异常体系

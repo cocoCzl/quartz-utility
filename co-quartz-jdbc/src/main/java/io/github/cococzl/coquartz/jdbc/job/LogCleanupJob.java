@@ -6,6 +6,7 @@ import org.quartz.JobExecutionContext;
 import org.quartz.JobExecutionException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
 
 public class LogCleanupJob implements Job {
 
@@ -14,14 +15,17 @@ public class LogCleanupJob implements Job {
     public static final String JOB_NAME = "CO_QUARTZ_LOG_CLEANUP_JOB";
     public static final String JOB_GROUP = "CO_QUARTZ_INTERNAL";
     public static final String RETENTION_DAYS_KEY = "retentionDays";
+    private TaskLogRepository taskLogRepository;
+
+    @Autowired
+    public void setTaskLogRepository(TaskLogRepository taskLogRepository) {
+        this.taskLogRepository = taskLogRepository;
+    }
 
     @Override
     public void execute(JobExecutionContext context) throws JobExecutionException {
-        TaskLogRepository taskLogRepository = (TaskLogRepository) context.getJobDetail()
-                .getJobDataMap().get("taskLogRepository");
         if (taskLogRepository == null) {
-            log.warn("TaskLogRepository not found in JobDataMap, skipping log cleanup");
-            return;
+            throw new JobExecutionException("TaskLogRepository was not injected into the cleanup job");
         }
 
         int retentionDays = context.getJobDetail().getJobDataMap().getIntValue(RETENTION_DAYS_KEY);

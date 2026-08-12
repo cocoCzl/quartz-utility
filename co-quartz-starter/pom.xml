@@ -12,18 +12,12 @@
 
   <artifactId>co-quartz-starter</artifactId>
   <name>Co-Quartz Starter</name>
-  <description>Spring Boot Starter that pulls in co-quartz-core and co-quartz-jdbc for auto-configuration.</description>
+  <description>Spring Boot Starter for Co-Quartz core scheduling; JDBC execution logging is available as an explicit optional module.</description>
 
   <dependencies>
     <dependency>
       <groupId>io.github.cococzl</groupId>
       <artifactId>co-quartz-core</artifactId>
-      <version>${project.version}</version>
-    </dependency>
-
-    <dependency>
-      <groupId>io.github.cococzl</groupId>
-      <artifactId>co-quartz-jdbc</artifactId>
       <version>${project.version}</version>
     </dependency>
 
@@ -36,6 +30,12 @@
     <dependency>
       <groupId>com.h2database</groupId>
       <artifactId>h2</artifactId>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>io.github.cococzl</groupId>
+      <artifactId>co-quartz-jdbc</artifactId>
+      <version>${project.version}</version>
       <scope>test</scope>
     </dependency>
   </dependencies>

@@ -199,19 +199,21 @@ class CoQuartzJobFactoryTest {
     }
 
     @Test
-    void nullAsyncTaskLogService_noWrapping() throws Exception {
+    void nullAsyncTaskLogService_stillWrapsEnhancedJob() throws Exception {
         ObjectProvider<AsyncTaskLogService> nullProvider = mock();
         when(nullProvider.getIfAvailable()).thenReturn(null);
 
         CoQuartzJobFactory factory = new CoQuartzJobFactory();
         factory.setAsyncTaskLogServiceProvider(nullProvider);
         factory.setBeanFactory(beanFactory);
+        factory.setTimeoutExecutor(timeoutExecutor);
+        factory.setProperties(properties);
 
         JobDataMap jobDataMap = new JobDataMap();
         jobDataMap.put(CoQuartzConstants.ENHANCED, true);
         TriggerFiredBundle bundle = createBundle(jobDataMap);
 
         Object result = factory.createJobInstance(bundle);
-        assertThat(result).isNotInstanceOf(EnhancedJob.class);
+        assertThat(result).isInstanceOf(EnhancedJob.class);
     }
 }
