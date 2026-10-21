@@ -59,6 +59,48 @@ class QuartzConcurrencyTest {
         BlockingJob.release.countDown();
     }
 
+    @Test
+    void timedOutBusinessKeepsQuartzNonConcurrentLeaseUntilItActuallyExits() throws Exception {
+        scheduler = scheduler();
+        var pool = java.util.concurrent.Executors.newFixedThreadPool(2);
+        BlockingJob.reset();
+        try {
+            var factory = new CoQuartzJobFactory();
+            factory.setProperties(new io.github.cococzl.coquartz.config.CoQuartzProperties());
+            factory.setTimeoutExecutor(pool);
+            scheduler.setJobFactory(factory);
+            QuartzTaskBuilder.newBuilder().jobClass(IgnoresInterruptJob.class).jobName("timeoutSerial")
+                    .intervalInSeconds(3600).startAt(new java.util.Date(System.currentTimeMillis() + 3600000))
+                    .timeout(30).retryTimes(1).retryInterval(20).schedule(scheduler);
+            scheduler.triggerJob(JobKey.jobKey("timeoutSerial"));
+            assertThat(BlockingJob.firstStarted.await(3, TimeUnit.SECONDS)).isTrue();
+            scheduler.triggerJob(JobKey.jobKey("timeoutSerial"));
+            assertThat(BlockingJob.secondStarted.await(300, TimeUnit.MILLISECONDS)).isFalse();
+            assertThat(BlockingJob.maxActive.get()).isEqualTo(1);
+            assertThat(scheduler.getCurrentlyExecutingJobs()).hasSize(1);
+            BlockingJob.release.countDown();
+            assertThat(BlockingJob.secondStarted.await(3, TimeUnit.SECONDS)).isTrue();
+            assertThat(BlockingJob.maxActive.get()).isEqualTo(1);
+        } finally {
+            BlockingJob.release.countDown();
+            pool.shutdownNow();
+        }
+    }
+
+    public static class IgnoresInterruptJob implements Job {
+        public void execute(JobExecutionContext context) {
+            int active = BlockingJob.active.incrementAndGet();
+            BlockingJob.maxActive.accumulateAndGet(active, Math::max);
+            if (BlockingJob.starts.incrementAndGet() == 1) BlockingJob.firstStarted.countDown();
+            else BlockingJob.secondStarted.countDown();
+            try {
+                while (BlockingJob.release.getCount() > 0) {
+                    try { BlockingJob.release.await(); } catch (InterruptedException ignored) { }
+                }
+            } finally { BlockingJob.active.decrementAndGet(); }
+        }
+    }
+
     private Scheduler scheduler() throws Exception {
         Properties properties = new Properties();
         properties.setProperty("org.quartz.scheduler.instanceName", "concurrency-" + System.nanoTime());

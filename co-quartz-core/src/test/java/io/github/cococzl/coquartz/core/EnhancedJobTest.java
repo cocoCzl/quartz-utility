@@ -309,7 +309,7 @@ class EnhancedJobTest {
     }
 
     @Test
-    void timeoutThatIgnoresInterruptReportsUnconfirmedTermination() throws Exception {
+    void timeoutWaitsForBusinessTerminationBeforeReportingCompletion() throws Exception {
         enhancedConfig.put(CoQuartzConstants.RETRY_TIMES, 0);
         enhancedConfig.put(CoQuartzConstants.TIMEOUT, 10);
         doAnswer(invocation -> {
@@ -322,8 +322,8 @@ class EnhancedJobTest {
 
         assertThatThrownBy(() -> createEnhancedJob().execute(context))
                 .isInstanceOf(TaskTimeoutException.class)
-                .hasMessageContaining("termination is unconfirmed");
-        verify(alertEventPublisher).publishTimeout("DEFAULT.testJob", 10L, false);
+                .hasMessageContaining("acknowledged interruption");
+        verify(alertEventPublisher).publishTimeout("DEFAULT.testJob", 10L, true);
     }
 
     @Test

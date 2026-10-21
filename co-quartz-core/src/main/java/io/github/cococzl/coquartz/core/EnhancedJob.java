@@ -17,7 +17,6 @@ import org.slf4j.LoggerFactory;
 
 import java.time.LocalDateTime;
 import java.util.concurrent.*;
-import java.util.concurrent.atomic.AtomicBoolean;
 
 public class EnhancedJob implements Job {
 
@@ -234,33 +233,51 @@ public class EnhancedJob implements Job {
         }
     }
 
-    private void executeWithTimeout(JobExecutionContext context, long timeoutMs) throws Exception {
-        AtomicBoolean completed = new AtomicBoolean();
-        Future<?> future = timeoutExecutor.submit(() -> {
-            try {
-                delegate.execute(context);
-            } catch (JobExecutionException e) {
-                throw new CompletionException(e);
-            } finally {
-                completed.set(true);
-            }
-        }, timeoutExecutor);
+    private static final ScheduledThreadPoolExecutor TIMEOUT_TIMER = timeoutTimer();
 
-        try {
-            future.get(timeoutMs, TimeUnit.MILLISECONDS);
-        } catch (TimeoutException e) {
-            future.cancel(true);
-            throw new TaskTimeoutException(timeoutMs, completed.get());
-        } catch (ExecutionException e) {
-            Throwable cause = e.getCause();
-            if (cause instanceof JobExecutionException jee) {
-                throw jee;
+    private static ScheduledThreadPoolExecutor timeoutTimer() {
+        var timer = new ScheduledThreadPoolExecutor(1, task -> {
+            Thread thread = new Thread(task, "co-quartz-timeout-timer");
+            thread.setDaemon(true);
+            return thread;
+        });
+        timer.setRemoveOnCancelPolicy(true);
+        return timer;
+    }
+
+    private void executeWithTimeout(JobExecutionContext context, long timeoutMs) throws Exception {
+        Thread worker = Thread.currentThread();
+        Object lifecycle = new Object();
+        boolean[] state = new boolean[2]; // completed, deadline exceeded
+        boolean interruptedBefore = worker.isInterrupted();
+        ScheduledFuture<?> deadline = TIMEOUT_TIMER.schedule(() -> {
+            synchronized (lifecycle) {
+                if (!state[0]) {
+                    state[1] = true;
+                    if (metrics != null) metrics.terminationUnconfirmed();
+                    worker.interrupt();
+                }
             }
-            throw new JobExecutionException(cause);
-        } catch (InterruptedException e) {
-            Thread.currentThread().interrupt();
-            throw new JobExecutionException("Task execution interrupted", e);
+        }, timeoutMs, TimeUnit.MILLISECONDS);
+        Exception failure = null;
+        try {
+            delegate.execute(context);
+        } catch (Exception error) {
+            failure = error;
+        } finally {
+            synchronized (lifecycle) {
+                state[0] = true;
+                deadline.cancel(false);
+                if (state[1]) {
+                    if (metrics != null) metrics.terminationConfirmed();
+                    // Do not leak the timer's interrupt into Quartz's next execution.
+                    Thread.interrupted();
+                    if (interruptedBefore) worker.interrupt();
+                }
+            }
         }
+        if (state[1]) throw new TaskTimeoutException(timeoutMs, true);
+        if (failure != null) throw failure;
     }
 
     private void logExecution(TaskExecutionLog taskLog) {

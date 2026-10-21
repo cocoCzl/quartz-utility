@@ -16,6 +16,7 @@ public class CoQuartzMetrics {
 
     private final MeterRegistry meterRegistry;
     private final AtomicInteger activeJobs;
+    private final AtomicInteger unconfirmedTerminations = new AtomicInteger();
     private final int maxJobTags;
     private final ConcurrentHashMap.KeySetView<String, Boolean> knownJobTags = ConcurrentHashMap.newKeySet();
 
@@ -28,6 +29,7 @@ public class CoQuartzMetrics {
         this.maxJobTags = Math.max(0, maxJobTags);
         this.activeJobs = new AtomicInteger(0);
         meterRegistry.gauge("co_quartz_job_active", activeJobs, AtomicInteger::get);
+        meterRegistry.gauge("co_quartz_job_termination_unconfirmed", unconfirmedTerminations, AtomicInteger::get);
     }
 
     public void recordSuccess(String jobKey, long durationMs) {
@@ -65,6 +67,13 @@ public class CoQuartzMetrics {
     public void jobFinished() {
         activeJobs.decrementAndGet();
     }
+
+    public void terminationUnconfirmed() {
+        unconfirmedTerminations.incrementAndGet();
+        meterRegistry.counter("co_quartz_job_interrupt_requests_total").increment();
+    }
+
+    public void terminationConfirmed() { unconfirmedTerminations.decrementAndGet(); }
 
     public void recordRetry(String jobKey) { count("co_quartz_job_retries_total", metricJobKey(jobKey)); }
     public void recordTimeout(String jobKey) { count("co_quartz_job_timeouts_total", metricJobKey(jobKey)); }
