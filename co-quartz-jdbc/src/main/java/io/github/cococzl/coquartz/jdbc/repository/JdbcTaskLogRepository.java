@@ -283,7 +283,15 @@ public class JdbcTaskLogRepository implements TaskLogRepository {
     public int cleanup(int daysToKeep) {
         LocalDateTime cutoff = java.time.Instant.now().minus(java.time.Duration.ofDays(daysToKeep))
                 .atZone(java.time.ZoneOffset.UTC).toLocalDateTime();
-        return jdbcTemplate.update("DELETE FROM quartz_task_log WHERE execute_time < ?", cutoff);
+        if (daysToKeep < 1) throw new IllegalArgumentException("Retention days must be positive");
+        List<String> ids = jdbcTemplate.query("SELECT id FROM quartz_task_log WHERE execute_time < ? AND exec_state IN (?, ?, ?) ORDER BY execute_time, id LIMIT 1000",
+                (rs, row) -> rs.getString(1), cutoff, LogTaskExecStateEnum.SUCCESS.getCode(),
+                LogTaskExecStateEnum.FAIL.getCode(), LogTaskExecStateEnum.INTERRUPTED.getCode());
+        if (ids.isEmpty()) return 0;
+        String placeholders = String.join(",", java.util.Collections.nCopies(ids.size(), "?"));
+        List<Object> arguments = new java.util.ArrayList<>(ids);
+        arguments.add(LogTaskExecStateEnum.STARTED.getCode());
+        return jdbcTemplate.update("DELETE FROM quartz_task_log WHERE id IN (" + placeholders + ") AND exec_state <> ?", arguments.toArray());
     }
 
     @Override

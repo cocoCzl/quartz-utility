@@ -134,9 +134,9 @@ public class EnhancedJob implements InterruptableJob {
                 }
                 int attempt = scheduledAttempt;
 
-                LocalDateTime startTime = LocalDateTime.now();
+                LocalDateTime startTime = LocalDateTime.now(java.time.ZoneOffset.UTC);
                 TaskExecutionLog auditLog = startReliableAudit(context, executionId, attempt, startTime);
-                long startMs = System.currentTimeMillis();
+                long startMs = System.nanoTime();
                 LogTaskExecStateEnum execState;
                 String errorMessage = null;
                 String stackTrace = null;
@@ -164,8 +164,8 @@ public class EnhancedJob implements InterruptableJob {
                     lastException = new JobExecutionException(e);
                 }
 
-                long executionTimeMs = System.currentTimeMillis() - startMs;
-                LocalDateTime endTime = LocalDateTime.now();
+                long executionTimeMs = TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - startMs);
+                LocalDateTime endTime = LocalDateTime.now(java.time.ZoneOffset.UTC);
                 String triggerKey = runtimeData.getString(CoQuartzConstants.ORIGIN_TRIGGER_KEY);
                 if (triggerKey == null) triggerKey = context.getTrigger().getKey().toString();
 

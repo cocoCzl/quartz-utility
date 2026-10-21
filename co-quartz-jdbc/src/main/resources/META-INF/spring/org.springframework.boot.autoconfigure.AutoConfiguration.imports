@@ -1,1 +1,2 @@
 io.github.cococzl.coquartz.jdbc.config.CoQuartzJdbcAutoConfiguration
+io.github.cococzl.coquartz.jdbc.config.DisabledCleanupAutoConfiguration

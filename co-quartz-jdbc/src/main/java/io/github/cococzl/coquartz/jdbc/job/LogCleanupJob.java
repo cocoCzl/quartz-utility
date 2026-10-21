@@ -8,6 +8,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 
+@org.quartz.DisallowConcurrentExecution
 public class LogCleanupJob implements Job {
 
     private static final Logger log = LoggerFactory.getLogger(LogCleanupJob.class);

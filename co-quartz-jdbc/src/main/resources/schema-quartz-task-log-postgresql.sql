@@ -20,3 +20,5 @@ CREATE TABLE IF NOT EXISTS quartz_task_log (
 CREATE INDEX IF NOT EXISTS idx_task_log_job_key_start_time ON quartz_task_log (job_key, start_time);
 CREATE INDEX IF NOT EXISTS idx_task_log_exec_state ON quartz_task_log (exec_state);
 CREATE INDEX IF NOT EXISTS idx_task_log_execution_id ON quartz_task_log (execution_id);
+
+CREATE INDEX idx_task_log_cleanup ON quartz_task_log (exec_state, execute_time, id);

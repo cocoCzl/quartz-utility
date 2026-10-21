@@ -383,3 +383,5 @@ mvn verify -Pintegration-tests
 定义协调仅支持启动或 Scheduler standby 阶段；共享 JDBC 集群更新必须停止/standby 所有节点并采用单写者部署，当前不支持混合版本节点同时协调定义，也不把内容 fingerprint 当发布顺序。暂停后换计划同样要求集群协调停机，单节点 pause-restore 标记不能代替分布式原子更新。定义指纹包含方法 beanName/methodName。
 
 方法删除/重命名不会自动删除未扫描到的任务。使用显式 `DefinitionMigrationPlan(namespace, retiredJobKeys)`：先 preview 检查所有权，再在所有节点停止/standby、单执行者条件下 apply。仅匹配 namespace 且 code-owned 的任务可移除；legacy 无 namespace 需先同版本协调补元数据。可将旧任务保留为 enabled=false 的 tombstone 完成迁移。
+
+清理任务会在重启时协调 retention-days、cron 和时区；关闭日志时移除已持久化的内部清理任务。执行记录时间按 UTC LocalDateTime 映射，耗时用单调时钟。旧版非 UTC 历史数据须按原部署时区离线转换后再按 UTC 清理。每次 cleanup 最多删除 1000 条终态记录（SUCCESS/FAIL/INTERRUPTED），保留 STARTED；积压可通过更密清理计划逐步排空。清理 Job 禁止并发，提供 exec_state/execute_time/id 索引。

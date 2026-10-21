@@ -21,15 +21,14 @@ public class LogCleanupRegistrar {
     }
 
     public void register() {
-        if (!properties.getLog().isEnabled()) {
-            log.info("Co-Quartz log cleanup disabled");
-            return;
-        }
-
         JobKey jobKey = new JobKey(LogCleanupJob.JOB_NAME, LogCleanupJob.JOB_GROUP);
         try {
-            if (scheduler.checkExists(jobKey)) {
-                log.info("Co-Quartz log cleanup job already registered");
+            JobDetail existing = scheduler.getJobDetail(jobKey);
+            if (existing != null && existing.getJobClass() != LogCleanupJob.class) {
+                throw new IllegalStateException("Internal cleanup identity belongs to another job");
+            }
+            if (!properties.getLog().isEnabled()) {
+                if (existing != null) scheduler.deleteJob(jobKey);
                 return;
             }
 
@@ -54,7 +53,7 @@ public class LogCleanupRegistrar {
                             null,
                             jobKey);
 
-            scheduler.scheduleJob(jobDetail, trigger);
+            scheduler.scheduleJobs(java.util.Map.of(jobDetail, java.util.Set.of(trigger)), existing != null);
             log.info("Co-Quartz log cleanup job registered with cron: {}", cronExpression);
         } catch (ObjectAlreadyExistsException e) {
             log.info("Co-Quartz log cleanup job was registered by another scheduler node");

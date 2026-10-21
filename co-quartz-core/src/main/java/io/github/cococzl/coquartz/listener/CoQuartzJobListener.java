@@ -133,9 +133,9 @@ public class CoQuartzJobListener implements JobListener {
         String jobKey = context.getJobDetail().getKey().toString();
         String triggerKey = context.getTrigger().getKey().toString();
         LocalDateTime startTime = context.getFireTime() != null
-                ? context.getFireTime().toInstant().atZone(java.time.ZoneId.systemDefault()).toLocalDateTime()
-                : LocalDateTime.now();
-        LocalDateTime endTime = LocalDateTime.now();
+                ? context.getFireTime().toInstant().atZone(java.time.ZoneOffset.UTC).toLocalDateTime()
+                : LocalDateTime.now(java.time.ZoneOffset.UTC);
+        LocalDateTime endTime = LocalDateTime.now(java.time.ZoneOffset.UTC);
         long executionTimeMs = context.getJobRunTime();
 
         LogTaskExecStateEnum execState = (jobException == null)

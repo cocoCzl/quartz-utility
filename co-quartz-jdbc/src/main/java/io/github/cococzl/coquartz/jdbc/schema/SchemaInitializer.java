@@ -67,6 +67,7 @@ public class SchemaInitializer {
         addColumnIfMissing("application_namespace", "VARCHAR(200)");
         addColumnIfMissing("origin_trigger_key", "VARCHAR(400)");
         addColumnIfMissing("origin_scheduled_time", "BIGINT");
+        createIndex("idx_task_log_cleanup", "exec_state, execute_time, id");
         markApplied(3);
     }
 

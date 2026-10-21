@@ -133,6 +133,18 @@ class JdbcTaskLogRepositoryTest {
     }
 
     @Test
+    void cleanupKeepsStartedAuditRowsEvenWhenOlderThanRetention() {
+        var started = createLog("long-running", LogTaskExecStateEnum.STARTED, 1, false);
+        started.setExecuteTime(LocalDateTime.now(java.time.ZoneOffset.UTC).minusDays(100));
+        started.setStartTime(started.getExecuteTime());
+        repository.insert(started);
+        var completed = createLog("old-completed", LogTaskExecStateEnum.SUCCESS, 1, true);
+        completed.setExecuteTime(started.getExecuteTime()); repository.insert(completed);
+        assertThat(repository.cleanup(30)).isEqualTo(1);
+        assertThat(repository.latestLogs("long-running", 10)).hasSize(1);
+    }
+
+    @Test
     void startedRecordsCanBeAtomicallyMarkedInterrupted() {
         TaskExecutionLog old = createLog("DEFAULT.oldAudit", LogTaskExecStateEnum.STARTED, 1, false);
         old.setStartTime(LocalDateTime.now().minusMinutes(2));

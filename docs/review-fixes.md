@@ -101,3 +101,11 @@ unschedule 优先且不安排重试；增强任务 refireImmediately 归一到�
 fingerprint v2 加入 beanName/methodName 并存储绑定元数据、应用 namespace。拒绝 active Scheduler live rescan；显式 DefinitionMigrationPlan 支持预览与受控删除，仅自己 namespace/code-owned，未扫描任务不自动删除。明确不支持共享 JDBC 混合版本多写者，必须所有节点 standby/停止和单写者发布；不宣称已解决暂停重调度的跨节点窗口。
 
 未验证：真实 MySQL/PostgreSQL 多节点更新与暂停竞争。采用明确支持边界，未引入只靠摘要或 JVM 锁的虚假版本协调。
+
+## R15
+
+确认成立。更新清理配置、保留 STARTED 回归修复前 2 failures。`mvn -q -pl co-quartz-jdbc -am -Dtest=LogCleanupRegistrarTest,JdbcTaskLogRepositoryTest,SchemaInitializerTest -Dsurefire.failIfNoSpecifiedTests=false test`：20 通过。
+
+内部清理定义协调更新/禁用删除，额外自动配置在日志关闭时仍执行移除；冲突身份拒绝覆盖。执行时间 UTC、耗时 nanoTime，终态每次限 1000 条、STARTED 不删，增加索引及清理非并发标记。旧非 UTC 历史记录需按旧部署时区离线迁移，不能猜测历史时区自动改写。
+
+未验证：真实数据库大表锁/IO 压测、非 UTC 历史迁移；禁用迁移自动配置仍待最终 Boot 全量验证。
