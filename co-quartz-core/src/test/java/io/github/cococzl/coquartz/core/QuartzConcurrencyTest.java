@@ -101,6 +101,40 @@ class QuartzConcurrencyTest {
         }
     }
 
+    @org.junit.jupiter.params.ParameterizedTest
+    @org.junit.jupiter.params.provider.ValueSource(booleans = {false, true})
+    void ignoredTimeoutDoesNotOverlapActualPeriodicOrRetryTrigger(boolean retry) throws Exception {
+        scheduler = scheduler();
+        BlockingJob.reset();
+        TrackingJob.fires.clear();
+        try {
+            QuartzTaskBuilder.newBuilder().jobClass(TrackingJob.class).jobName("tracked")
+                    .intervalInSeconds(1).startAt(new java.util.Date(System.currentTimeMillis() + (retry ? 3600000 : 0)))
+                    .concurrent(false).timeout(30).retryTimes(retry ? 1 : 0).retryInterval(20).schedule(scheduler);
+            if (retry) scheduler.triggerJob(JobKey.jobKey("tracked"));
+            assertThat(BlockingJob.firstStarted.await(3, TimeUnit.SECONDS)).isTrue();
+            assertThat(BlockingJob.secondStarted.await(retry ? 300 : 1200, TimeUnit.MILLISECONDS)).isFalse();
+            assertThat(scheduler.getCurrentlyExecutingJobs()).hasSize(1);
+            assertThat(scheduler.getTriggersOfJob(JobKey.jobKey("tracked")))
+                    .noneMatch(t -> CoQuartzConstants.RETRY_TRIGGER_GROUP.equals(t.getKey().getGroup()));
+            BlockingJob.release.countDown();
+            assertThat(BlockingJob.secondStarted.await(4, TimeUnit.SECONDS)).isTrue();
+            assertThat(BlockingJob.maxActive).hasValue(1);
+            var fire = TrackingJob.fires.get(1);
+            assertThat(fire.getKey().getGroup()).isEqualTo(retry ? CoQuartzConstants.RETRY_TRIGGER_GROUP : "DEFAULT");
+            if (retry) assertThat(fire.getJobDataMap().getInt(CoQuartzConstants.RETRY_ATTEMPT)).isEqualTo(2);
+            else assertThat(fire.getKey()).isEqualTo(org.quartz.TriggerKey.triggerKey("TRIGGER_tracked"));
+        } finally { BlockingJob.release.countDown(); }
+    }
+
+    public static class TrackingJob implements Job {
+        static final java.util.List<org.quartz.Trigger> fires = new java.util.concurrent.CopyOnWriteArrayList<>();
+        public void execute(JobExecutionContext context) {
+            fires.add(context.getTrigger());
+            new IgnoresInterruptJob().execute(context);
+        }
+    }
+
     private Scheduler scheduler() throws Exception {
         Properties properties = new Properties();
         properties.setProperty("org.quartz.scheduler.instanceName", "concurrency-" + System.nanoTime());
