@@ -162,8 +162,11 @@ public class CoQuartzCoreAutoConfiguration {
     @ConditionalOnMissingBean(AlertEventPublisher.class)
     public AlertEventPublisher alertEventPublisher(ApplicationEventPublisher eventPublisher,
                                                      CoQuartzProperties properties,
-                                                     @Qualifier("coQuartzAlertExecutor") java.util.concurrent.Executor alertExecutor) {
-        return new AlertEventPublisher(eventPublisher, properties, alertExecutor);
+                                                     @Qualifier("coQuartzAlertExecutor") java.util.concurrent.Executor alertExecutor,
+                                                     LogSanitizer sanitizer) {
+        AlertEventPublisher publisher = new AlertEventPublisher(eventPublisher, properties, alertExecutor);
+        publisher.setLogSanitizer(sanitizer);
+        return publisher;
     }
 
     @Bean

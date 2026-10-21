@@ -194,7 +194,7 @@ public class CoQuartzJobListener implements JobListener {
             TaskExecutionLogWriter writer = logWriter();
             if (writer != null) writer.write(taskLog);
         } catch (Exception e) {
-            log.error("Failed to log task execution for job: {}", jobKey, e);
+            log.error("Failed to log task execution for job: {}: {}", sanitize(jobKey, 500), sanitize(e.getMessage(), 500));
         }
     }
 

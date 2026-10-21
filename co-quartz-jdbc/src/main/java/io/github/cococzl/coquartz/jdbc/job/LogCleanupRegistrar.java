@@ -59,7 +59,7 @@ public class LogCleanupRegistrar {
         } catch (ObjectAlreadyExistsException e) {
             log.info("Co-Quartz log cleanup job was registered by another scheduler node");
         } catch (SchedulerException e) {
-            log.error("Failed to register Co-Quartz log cleanup job", e);
+            log.error("Failed to register Co-Quartz log cleanup job: {}", new io.github.cococzl.coquartz.service.DefaultLogSanitizer().sanitize(e.getMessage()));
         }
     }
 }

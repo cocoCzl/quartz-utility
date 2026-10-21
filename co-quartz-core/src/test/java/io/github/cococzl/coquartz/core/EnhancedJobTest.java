@@ -367,6 +367,23 @@ class EnhancedJobTest {
     }
 
     @Test
+    void infrastructureFailureDoesNotLeakCredentialThroughControlledLogger() throws Exception {
+        var logger = (ch.qos.logback.classic.Logger) org.slf4j.LoggerFactory.getLogger(EnhancedJob.class);
+        var capture = new ch.qos.logback.core.read.ListAppender<ch.qos.logback.classic.spi.ILoggingEvent>();
+        capture.start(); logger.addAppender(capture);
+        doThrow(new IllegalStateException("password=infra-secret")).when(asyncTaskLogService).write(any());
+        try {
+            createEnhancedJob().execute(context);
+            assertThat(capture.list).isNotEmpty();
+            for (var event : capture.list) {
+                assertThat(event.getFormattedMessage()).doesNotContain("infra-secret");
+                if (event.getThrowableProxy() != null) assertThat(event.getThrowableProxy().getMessage())
+                        .doesNotContain("infra-secret");
+            }
+        } finally { logger.detachAppender(capture); capture.stop(); }
+    }
+
+    @Test
     void execute_withExponentialBackoff_increasesDelay() {
         RetryContext ctx = new RetryContext(2, 100, true, 2.0);
         assertThat(ctx.getNextRetryDelay()).isEqualTo(100);

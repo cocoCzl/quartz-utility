@@ -369,3 +369,5 @@ mvn verify -Pintegration-tests
 无限忽略中断的业务可能无限占用工作线程，并阻止 `shutdown(wait=true)` 完成。集群不通过 JVM 本地锁控制并发。可靠审计必须使用 `CoQuartzJobFactory` 的受控执行装饰层，JobListener 不负责阻断任务。
 
 传统 Job 由 `CoQuartzJobFactory` 每次创建独立实例：构造器自动注入、字段注入、SchedulerContext → JobDataMap → Trigger 数据属性绑定、初始化与 BeanPostProcessor 代理，再执行并销毁目标实例。不会复用已扫描的 singleton Job。方法任务继续调用原 Spring bean。自定义 JobFactory 不会自动继承这些能力；自定义 Scheduler 必须显式安装 CoQuartzJobFactory，不能直接执行持久化 marker wrapper。
+
+默认 `LogSanitizer` 尽力覆盖 Authorization Bearer/Basic、带引号 JSON 凭据字段、URL 查询参数与常见 URI/JDBC user:password 格式（password/passwd/pwd/secret/token/access_token/refresh_token/api_key 等，忽略大小写）。它不是通用秘密检测器；自定义格式请提供 `LogSanitizer`。库控制的执行记录、失败事件与基础设施诊断会脱敏；`capture-stack-trace=false` 不保存或发布库控制的堆栈。原始业务异常仍按 Quartz 语义抛出，业务自己的日志、Quartz 原生日志与第三方监听器不在库的脱敏边界内，应在部署日志管道另行治理。

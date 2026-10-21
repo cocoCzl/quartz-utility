@@ -67,3 +67,9 @@ unschedule 优先且不安排重试；增强任务 refireImmediately 归一到�
 确认成立。H2 缺失/冲突/身份不符回归修复前失败；缺少 ReliableAuditService 的启动回归在 log.enabled=true 下确认修复前启动成功而失败。修复后 `mvn -q -pl co-quartz-jdbc -am -Dtest=JdbcTaskLogRepositoryTest,JdbcReliableAuditServiceTest,EnhancedJobTest,NativeAuditExecutionTest,CoQuartzAutoConfigurationTest -Dsurefire.failIfNoSpecifiedTests=false test`：40 通过。
 
 完成先核对执行身份，STARTED 条件更新同时限定 executionId/fireInstanceId/jobKey/attempt；更新零行重新读取，仅同身份、同状态/结果/耗时/终态标记才接受幂等，否则明确报 missing/identity/conflict。未吞数据库异常。可靠审计缺少服务在启动时失败，直接构造增强层也不再静默退化。完成失败异常保留业务结果、executionId、attempt，不重跑已成功业务。修复 retry STARTED 与完成日志都复用原始 Trigger 身份。
+
+## R10
+
+确认成立。新增结构化/传输凭据及基础设施异常日志回归，修复前 11 项中 8 failures。修复后 `mvn -q -pl co-quartz-core -Dtest=DefaultLogSanitizerTest,EnhancedJobTest,AlertEventPublisherTest,CoQuartzJobListenerTest test` 通过。
+
+补 Bearer/Basic、JSON、URL 查询、JDBC/URI 凭据和大小写/cause 格式；普通诊断保持可读，扩展点保留。库受控基础设施日志不再把原 Throwable 直接传给 SLF4J；失败事件再次应用 sanitizer 并遵守 capture-stack-trace。README 明确最佳努力规则与业务/Quartz 原生日志边界，未提供改变异常类型的全局脱敏适配，不破坏原生控制标记。

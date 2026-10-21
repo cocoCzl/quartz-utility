@@ -34,7 +34,7 @@ public class LogCleanupJob implements Job {
             int deleted = taskLogRepository.cleanup(retentionDays);
             log.info("Co-Quartz log cleanup completed, deleted {} records older than {} days", deleted, retentionDays);
         } catch (Exception e) {
-            log.error("Co-Quartz log cleanup failed", e);
+            log.error("Co-Quartz log cleanup failed: {}", new io.github.cococzl.coquartz.service.DefaultLogSanitizer().sanitize(e.getMessage()));
             throw new JobExecutionException("Log cleanup failed", e);
         }
     }

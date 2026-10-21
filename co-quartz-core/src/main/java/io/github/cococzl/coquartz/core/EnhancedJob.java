@@ -319,7 +319,7 @@ public class EnhancedJob implements InterruptableJob {
                 logWriter.write(taskLog);
             }
         } catch (Exception e) {
-            log.error("Failed to log task execution for job: {}", taskLog.getJobKey(), e);
+            log.error("Failed to log task execution for job: {}: {}", sanitize(taskLog.getJobKey(), 500), sanitize(e.getMessage(), 500));
         }
     }
 

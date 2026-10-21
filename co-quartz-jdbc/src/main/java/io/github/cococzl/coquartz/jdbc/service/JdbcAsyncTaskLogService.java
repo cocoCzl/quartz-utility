@@ -133,7 +133,7 @@ public class JdbcAsyncTaskLogService implements AsyncTaskLogService {
                 writeAttempts.remove(taskLog.getId());
             } catch (Exception e) {
                 writeFailureCount.incrementAndGet();
-                log.error("Failed to insert task log for job: {}", taskLog.getJobKey(), e);
+                log.error("Failed to insert task log for job: {}: {}", taskLog.getJobKey(), new io.github.cococzl.coquartz.service.DefaultLogSanitizer().sanitize(e.getMessage()));
                 int attempts = writeAttempts.merge(taskLog.getId(), 1, Integer::sum);
                 if (attempts > maxWriteRetries) {
                     permanentFailureCount.incrementAndGet();
@@ -158,7 +158,7 @@ public class JdbcAsyncTaskLogService implements AsyncTaskLogService {
         try {
             eventPublisher.publishEvent(new TaskLogPipelineEvent(this, type, count));
         } catch (Exception eventFailure) {
-            log.warn("Failed to publish execution-log pipeline event {}", type, eventFailure);
+            log.warn("Failed to publish execution-log pipeline event {}: {}", type, new io.github.cococzl.coquartz.service.DefaultLogSanitizer().sanitize(eventFailure.getMessage()));
         }
     }
 }

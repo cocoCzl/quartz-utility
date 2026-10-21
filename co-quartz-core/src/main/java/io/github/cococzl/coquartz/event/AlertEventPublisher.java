@@ -16,6 +16,8 @@ public class AlertEventPublisher {
     private final ApplicationEventPublisher eventPublisher;
     private final CoQuartzProperties properties;
     private final Executor executor;
+    private io.github.cococzl.coquartz.service.LogSanitizer sanitizer = new io.github.cococzl.coquartz.service.DefaultLogSanitizer();
+    public void setLogSanitizer(io.github.cococzl.coquartz.service.LogSanitizer sanitizer) { this.sanitizer = sanitizer; }
     private final ConcurrentHashMap<String, FailureWindow> failureWindows = new ConcurrentHashMap<>();
 
     public AlertEventPublisher(ApplicationEventPublisher eventPublisher,
@@ -37,7 +39,7 @@ public class AlertEventPublisher {
 
     public void publishFailure(String jobKey, String errorMessage, String stackTrace) {
         dispatch(() -> {
-            eventPublisher.publishEvent(new TaskFailureEvent(this, jobKey, errorMessage, stackTrace));
+            eventPublisher.publishEvent(new TaskFailureEvent(this, jobKey, sanitizer.sanitize(errorMessage), properties.getLog().isCaptureStackTrace() ? sanitizer.sanitize(stackTrace) : null));
         }, "TaskFailureEvent", jobKey);
     }
 
@@ -79,9 +81,9 @@ public class AlertEventPublisher {
     private void dispatch(Runnable action, String eventName, String jobKey) {
         try {
             executor.execute(() -> {
-                try { action.run(); } catch (Exception e) { log.error("Failed to publish {} for job: {}", eventName, jobKey, e); }
+                try { action.run(); } catch (Exception e) { log.error("Failed to publish {} for job: {}: {}", eventName, sanitizer.sanitize(jobKey), sanitizer.sanitize(e.getMessage())); }
             });
-        } catch (Exception e) { log.error("Failed to dispatch {} for job: {}", eventName, jobKey, e); }
+        } catch (Exception e) { log.error("Failed to dispatch {} for job: {}: {}", eventName, sanitizer.sanitize(jobKey), sanitizer.sanitize(e.getMessage())); }
     }
 
     private static final class FailureWindow {
