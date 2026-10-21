@@ -102,10 +102,10 @@ public class SchemaInitializer {
     private boolean columnExists(String column) {
         try (Connection connection = jdbcTemplate.getDataSource().getConnection()) {
             DatabaseMetaData metadata = connection.getMetaData();
-            try (var columns = metadata.getColumns(connection.getCatalog(), null, "quartz_task_log", column)) {
+            try (var columns = metadata.getColumns(connection.getCatalog(), connection.getSchema(), "quartz_task_log", column)) {
                 if (columns.next()) return true;
             }
-            try (var columns = metadata.getColumns(connection.getCatalog(), null, "QUARTZ_TASK_LOG", column.toUpperCase(Locale.ROOT))) {
+            try (var columns = metadata.getColumns(connection.getCatalog(), connection.getSchema(), "QUARTZ_TASK_LOG", column.toUpperCase(Locale.ROOT))) {
                 return columns.next();
             }
         } catch (Exception e) {
@@ -137,7 +137,7 @@ public class SchemaInitializer {
         try (Connection connection = jdbcTemplate.getDataSource().getConnection()) {
             DatabaseMetaData metadata = connection.getMetaData();
             for (String table : new String[] {"quartz_task_log", "QUARTZ_TASK_LOG"}) {
-                try (var indexes = metadata.getIndexInfo(connection.getCatalog(), null, table, false, false)) {
+                try (var indexes = metadata.getIndexInfo(connection.getCatalog(), connection.getSchema(), table, false, false)) {
                     while (indexes.next()) {
                         if (index.equalsIgnoreCase(indexes.getString("INDEX_NAME"))) return true;
                     }

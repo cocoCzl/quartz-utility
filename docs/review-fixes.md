@@ -121,3 +121,9 @@ fingerprint v2 加入 beanName/methodName 并存储绑定元数据、应用 name
 确认参数校验和 Async 组合问题；新增策略/Async 回归修复前失败，useProperties 原先只产生 Quartz 不可读配置错误，现由工厂 Customizer 先给明确拒绝原因。`mvn -q -pl co-quartz-core -Dtest=TaskPolicyValidationTest,QuartzJobReconciliationTest,QuartzJobAnnotationProcessorTest,QuartzTaskBuilderTest,RetryContextTest,CoQuartzAutoConfigurationTest test`：64 通过。
 
 共享验证器限制负数、NaN/Infinity、次数和延迟上界，首退避也受边界约束；Builder 持久数据类型/大小/保留键验证。拒绝 Async 和 Boot useProperties=true，namespace 长度校验。占位符/Profile 扩展属于报告第三批未承诺功能，未伪装成回归实现；专用 DataSource/JobFactory 完整 Boot 组合在最终 E2E 检查，不声称所有第三方配置已兼容。
+
+## R18
+
+确认成立。跨 schema 元数据回归修复前失败，独立版本脚本回归修复前缺资源。补各方言 V1 旧基线建表、V2 增列/索引及已有 V3；自动 metadata 限定当前 catalog/schema。`mvn -q -pl co-quartz-jdbc -am -Dtest=SchemaInitializerTest -Dsurefire.failIfNoSpecifiedTests=false test`：7 通过，包含 H2 原生及 MySQL/PostgreSQL 兼容模式脚本升级并保留旧数据。
+
+README 明确单迁移者、非幂等脚本、部分失败恢复、Flyway/Liquibase/部署工具、无应用 DDL 权限路径；未声称兼容模式等于真实三方言验证，真实 MySQL/PostgreSQL 待集成环境。

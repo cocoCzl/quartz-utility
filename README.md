@@ -389,3 +389,5 @@ mvn verify -Pintegration-tests
 查询详情展示业务 delegate/方法来源及带用途的 Trigger 列表（PRIMARY/RETRY/MANUAL/RECOVERY/EXTERNAL），主字段优先使用持久化主 Trigger 身份。`getRunningJobs`/`getLocalRunningJobs` 只代表当前 Scheduler 节点。`listJobs()` 最多 1000 条，可用 listJobs(limit)；Actuator 摘要最多 100 条并标记 LOCAL_SCHEDULER。日志分页 page>=1、size=1..1000，long offset，按 start_time DESC/id DESC 稳定排序；并发插入期间 offset 分页仍可能移动，精确历史遍历应固定时间窗口。
 
 任务级策略统一边界：retryTimes=0..1000、retryInterval=0..60000ms、backoffMultiplier 为有限的 1..100、timeout=0..604800000ms。注解、Builder 和 RetryContext 一致校验；动态 jobData 采用重试快照的可持久化类型/大小约束且禁止 co-quartz 保留键。Boot 自动配置明确拒绝 Quartz useProperties=true（内部元数据需要类型值）；自建 Scheduler 也必须保持该选项为 false。方法任务不支持 @Async（包括类级），会在注册时拒绝；cron/timeZone 仍为字面值，`${...}` 环境配置扩展不在此次缺陷修复中。
+
+独立生产迁移位于 `co-quartz-jdbc/src/main/resources/db/migration/{h2,mysql,postgresql}`：新库顺序 V1→V2→V3；已有旧基线表先备份和核对列，跳过 V1，再执行尚未完成的版本。已包含 V2 列的库只执行 V3。脚本交给 Flyway/Liquibase/部署系统单执行者管理，应用无需 DDL 权限，关闭 auto-create-table。脚本不是任意重复执行安全的；尤其 MySQL DDL 可能隐式提交，部分失败需核对实际列/索引、完成缺失步骤并由迁移工具修复版本记录，禁止盲目重跑。当前 schema-quartz-task-log-*.sql 是全量安装快照，不是旧表升级脚本。自动 Java DDL 只支持单迁移者启动，不支持多节点同时迁移。
