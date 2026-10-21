@@ -383,6 +383,20 @@ class QuartzJobReconciliationTest {
         assertThat(plan.apply(scheduler)).isEmpty();
     }
 
+    @Test
+    void asyncMethodTasksFailFastInsteadOfRecordingEarlySuccess() throws Exception {
+        scheduler = newScheduler();
+        try (var context = context("asyncTask", AsyncTaskBean.class)) {
+            assertThatThrownBy(() -> processor(context).registerJobs()).isInstanceOf(CoQuartzConfigurationException.class)
+                    .hasMessageContaining("Async");
+        }
+    }
+    static class AsyncTaskBean {
+        @org.springframework.scheduling.annotation.Async
+        @QuartzTask(name = "async", cron = "0 0 9 * * ?")
+        public void run() { }
+    }
+
     private Scheduler newScheduler() throws Exception {
         Properties properties = new Properties();
         properties.setProperty("org.quartz.scheduler.instanceName", "reconcile-" + System.nanoTime());

@@ -115,3 +115,9 @@ fingerprint v2 加入 beanName/methodName 并存储绑定元数据、应用 name
 确认成立。非法分页和 retry 优先于 cron 的回归修复前失败。`mvn -q -pl co-quartz-jdbc -am -Dtest=TaskQueryServiceTest,JdbcTaskLogRepositoryTest -Dsurefire.failIfNoSpecifiedTests=false test`：19 通过。
 
 存储主 Trigger 身份并提供用途列表，展示 delegate/方法来源；运行查询明确 local。分页校验和 long offset、复合排序，已有时间窗口过滤保留；listJobs 与 Actuator 限量。未引入游标分页或集群运行全景，不宣称动态插入下 offset 分页快照一致。
+
+## R17
+
+确认参数校验和 Async 组合问题；新增策略/Async 回归修复前失败，useProperties 原先只产生 Quartz 不可读配置错误，现由工厂 Customizer 先给明确拒绝原因。`mvn -q -pl co-quartz-core -Dtest=TaskPolicyValidationTest,QuartzJobReconciliationTest,QuartzJobAnnotationProcessorTest,QuartzTaskBuilderTest,RetryContextTest,CoQuartzAutoConfigurationTest test`：64 通过。
+
+共享验证器限制负数、NaN/Infinity、次数和延迟上界，首退避也受边界约束；Builder 持久数据类型/大小/保留键验证。拒绝 Async 和 Boot useProperties=true，namespace 长度校验。占位符/Profile 扩展属于报告第三批未承诺功能，未伪装成回归实现；专用 DataSource/JobFactory 完整 Boot 组合在最终 E2E 检查，不声称所有第三方配置已兼容。

@@ -46,6 +46,18 @@ class CoQuartzAutoConfigurationTest {
     }
 
     @Test
+    void unsupportedQuartzStringOnlyJobDataModeFailsFast() {
+        new ApplicationContextRunner().withConfiguration(AutoConfigurations.of(
+                QuartzAutoConfiguration.class, CoQuartzCoreAutoConfiguration.class))
+                .withPropertyValues("spring.quartz.auto-startup=false", "co-quartz.annotation.enabled=false",
+                        "spring.quartz.properties.org.quartz.jobStore.useProperties=true")
+                .run(context -> {
+                    assertThat(context).hasFailed();
+                    assertThat(context.getStartupFailure()).hasMessageContaining("useProperties");
+                });
+    }
+
+    @Test
     void monitoringDisabledBacksOffFromMicrometerMetrics() {
         new ApplicationContextRunner()
                 .withConfiguration(AutoConfigurations.of(CoQuartzMicrometerAutoConfiguration.class))

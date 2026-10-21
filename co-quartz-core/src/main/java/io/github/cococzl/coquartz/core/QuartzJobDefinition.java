@@ -198,6 +198,8 @@ public class QuartzJobDefinition {
         public Builder sourceDescription(String sourceDescription) { this.sourceDescription = sourceDescription; return this; }
 
         public QuartzJobDefinition build() {
+            if (enabled) TaskPolicyValidator.validate(retryTimes, retryInterval, backoffMultiplier, timeout,
+                    sourceDescription == null ? "Task definition" : sourceDescription);
             return new QuartzJobDefinition(this);
         }
     }

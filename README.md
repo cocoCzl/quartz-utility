@@ -387,3 +387,5 @@ mvn verify -Pintegration-tests
 清理任务会在重启时协调 retention-days、cron 和时区；关闭日志时移除已持久化的内部清理任务。执行记录时间按 UTC LocalDateTime 映射，耗时用单调时钟。旧版非 UTC 历史数据须按原部署时区离线转换后再按 UTC 清理。每次 cleanup 最多删除 1000 条终态记录（SUCCESS/FAIL/INTERRUPTED），保留 STARTED；积压可通过更密清理计划逐步排空。清理 Job 禁止并发，提供 exec_state/execute_time/id 索引。
 
 查询详情展示业务 delegate/方法来源及带用途的 Trigger 列表（PRIMARY/RETRY/MANUAL/RECOVERY/EXTERNAL），主字段优先使用持久化主 Trigger 身份。`getRunningJobs`/`getLocalRunningJobs` 只代表当前 Scheduler 节点。`listJobs()` 最多 1000 条，可用 listJobs(limit)；Actuator 摘要最多 100 条并标记 LOCAL_SCHEDULER。日志分页 page>=1、size=1..1000，long offset，按 start_time DESC/id DESC 稳定排序；并发插入期间 offset 分页仍可能移动，精确历史遍历应固定时间窗口。
+
+任务级策略统一边界：retryTimes=0..1000、retryInterval=0..60000ms、backoffMultiplier 为有限的 1..100、timeout=0..604800000ms。注解、Builder 和 RetryContext 一致校验；动态 jobData 采用重试快照的可持久化类型/大小约束且禁止 co-quartz 保留键。Boot 自动配置明确拒绝 Quartz useProperties=true（内部元数据需要类型值）；自建 Scheduler 也必须保持该选项为 false。方法任务不支持 @Async（包括类级），会在注册时拒绝；cron/timeZone 仍为字面值，`${...}` 环境配置扩展不在此次缺陷修复中。

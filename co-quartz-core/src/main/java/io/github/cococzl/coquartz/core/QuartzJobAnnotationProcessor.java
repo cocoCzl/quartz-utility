@@ -196,6 +196,10 @@ public class QuartzJobAnnotationProcessor implements SmartInitializingSingleton 
 
     private void validateMethodTask(String beanName, Object bean, Method method, QuartzTask annotation) {
         String source = beanName + "#" + method.getName();
+        if (AnnotatedElementUtils.hasAnnotation(method, org.springframework.scheduling.annotation.Async.class)
+                || AnnotatedElementUtils.hasAnnotation(AopUtils.getTargetClass(bean), org.springframework.scheduling.annotation.Async.class)) {
+            throw configurationError(source, "@Async is unsupported for synchronous Quartz method tasks");
+        }
         if (!Modifier.isPublic(method.getModifiers())) {
             throw configurationError(source, "method must be public");
         }

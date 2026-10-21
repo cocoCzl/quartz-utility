@@ -180,6 +180,8 @@ public class CoQuartzProperties implements InitializingBean {
 
     @Override
     public void afterPropertiesSet() {
+        require(scheduling.applicationNamespace != null && !scheduling.applicationNamespace.isBlank()
+                && scheduling.applicationNamespace.length() <= 200, "application-namespace must be 1..200 characters");
         require(log.retentionDays > 0, "co-quartz.log.retention-days must be greater than 0");
         require(CronExpression.isValidExpression(log.cleanupCron), "co-quartz.log.cleanup-cron must be a valid Quartz cron expression");
         require(!log.reliableAudit || log.enabled, "co-quartz.log.reliable-audit requires co-quartz.log.enabled=true");

@@ -208,6 +208,9 @@ public class QuartzTaskBuilder {
             jobName = jobClass.getSimpleName();
         }
 
+        TaskPolicyValidator.validate(retryTimes, retryInterval, backoffMultiplier, timeout, "Builder " + jobGroup + "." + jobName);
+        try { RetryPayloadSnapshot.copy(new JobDataMap(jobData)); }
+        catch (java.io.IOException invalid) { throw new CoQuartzSchedulingException("Invalid persistent jobData: " + invalid.getMessage(), invalid); }
         TaskIdentityPolicy.assertPublicGroup(jobGroup);
         TaskIdentityPolicy.assertPublicGroup(effectiveTriggerGroup());
         for (String key : jobData.keySet()) {

@@ -10,6 +10,7 @@ public class RetryContext {
     private long currentDelay;
 
     public RetryContext(int maxRetryTimes, long retryInterval, boolean exponentialBackoff, double backoffMultiplier) {
+        TaskPolicyValidator.validate(maxRetryTimes, retryInterval, backoffMultiplier, 0, "RetryContext");
         this.maxRetryTimes = maxRetryTimes;
         this.retryInterval = retryInterval;
         this.exponentialBackoff = exponentialBackoff;

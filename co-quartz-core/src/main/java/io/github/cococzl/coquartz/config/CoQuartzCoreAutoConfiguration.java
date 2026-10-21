@@ -98,8 +98,12 @@ public class CoQuartzCoreAutoConfiguration {
 
     @Bean
     public org.springframework.beans.factory.SmartInitializingSingleton reliableAuditValidator(
-            CoQuartzProperties properties, ObjectProvider<ReliableAuditService> audit) {
+            CoQuartzProperties properties, ObjectProvider<ReliableAuditService> audit, org.springframework.core.env.Environment environment) {
         return () -> {
+            if (Boolean.parseBoolean(environment.getProperty("spring.quartz.properties.org.quartz.jobStore.useProperties", "false"))) {
+                throw new io.github.cococzl.coquartz.exception.CoQuartzConfigurationException(
+                        "Quartz useProperties=true is unsupported; Co-Quartz requires typed JobDataMap values");
+            }
             if (properties.getLog().isReliableAudit() && audit.getIfAvailable() == null) {
                 throw new io.github.cococzl.coquartz.exception.CoQuartzConfigurationException(
                         "reliable-audit requires an available ReliableAuditService");
@@ -115,7 +119,12 @@ public class CoQuartzCoreAutoConfiguration {
 
     @Bean
     @ConditionalOnMissingBean(name = "coQuartzJobFactoryCustomizer")
-    public SchedulerFactoryBeanCustomizer coQuartzJobFactoryCustomizer(CoQuartzJobFactory coQuartzJobFactory) {
+    public SchedulerFactoryBeanCustomizer coQuartzJobFactoryCustomizer(CoQuartzJobFactory coQuartzJobFactory,
+                                                                               org.springframework.core.env.Environment environment) {
+        if (Boolean.parseBoolean(environment.getProperty("spring.quartz.properties.org.quartz.jobStore.useProperties", "false"))) {
+            throw new io.github.cococzl.coquartz.exception.CoQuartzConfigurationException(
+                    "Quartz useProperties=true is unsupported; Co-Quartz requires typed JobDataMap values");
+        }
         return factory -> factory.setJobFactory(coQuartzJobFactory);
     }
 
