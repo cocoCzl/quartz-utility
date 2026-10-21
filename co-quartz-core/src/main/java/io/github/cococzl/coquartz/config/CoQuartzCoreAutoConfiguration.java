@@ -64,11 +64,12 @@ public class CoQuartzCoreAutoConfiguration {
     @Bean(destroyMethod = "shutdown")
     @ConditionalOnMissingBean(name = "coQuartzAlertExecutor")
     public ExecutorService coQuartzAlertExecutor() {
-        return Executors.newSingleThreadExecutor(r -> {
+        return new java.util.concurrent.ThreadPoolExecutor(1, 1, 0, java.util.concurrent.TimeUnit.MILLISECONDS,
+                new java.util.concurrent.ArrayBlockingQueue<>(256), r -> {
             Thread thread = new Thread(r, "co-quartz-alert");
             thread.setDaemon(true);
             return thread;
-        });
+        }, new java.util.concurrent.ThreadPoolExecutor.AbortPolicy());
     }
 
     @Bean

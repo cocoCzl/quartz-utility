@@ -87,3 +87,9 @@ unschedule 优先且不安排重试；增强任务 refireImmediately 归一到�
 确认成立。关闭后拒收及忽略中断数据库回归修复前 1 failure、1 timeout。修复后 `mvn -q -pl co-quartz-jdbc -am -Dtest=JdbcAsyncTaskLogServiceTest,JdbcTaskLogRepositoryTest -Dsurefire.failIfNoSpecifiedTests=false test`：25 通过。
 
 新增兼容默认 insertBatch 接口，JDBC 实现事务 batchUpdate、失败回滚后逐行隔离，重复 ID 核对身份与结果。异步写统一单消费者，容量阈值立即提交、每轮继续多批，重试延至下一轮，retry 次数随有界队列项保存，无废弃 ID 缓存。shutdown 停止接收并仅在独立消费者执行排空，调用方有界 await，queued+in-flight 在超时后仍可见。计数包含 accepted/persisted/in-flight/dropped/permanent-failed。已验证阈值触发、部分失败/重复 ID、慢数据库与有界关闭；驱动不响应取消时不会宣称写入已完成。
+
+## R13
+
+确认成立。阻塞告警消费者、提交 2000 条后的容量回归修复前失败。`mvn -q -pl co-quartz-jdbc -am -Dtest=AlertEventPublisherAsyncTest,AlertEventPublisherTest,JdbcReliableAuditServiceTest,CoQuartzAutoConfigurationTest -Dsurefire.failIfNoSpecifiedTests=false test`：17 通过。
+
+生产线程池队列 256，AbortPolicy，发布层捕获拒绝并计 dropped；job/type 合并 1 秒重复故障，计 coalesced。failureWindows 最大 1024、1 小时 TTL；成功清理，缓存容量通过 5000 个删除任务场景验证。JDBC 自动配置审计失败事件转入同一异步 publisher，保留原始数据库异常，不使用 CallerRunsPolicy。

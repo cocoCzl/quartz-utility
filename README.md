@@ -377,3 +377,5 @@ mvn verify -Pintegration-tests
 已取消仅凭超龄 STARTED 自动判定中断的启动恢复。请通过 `recoverConfirmedStopped(cutoff, AuditRecoveryScope)` 显式提供应用、Scheduler、已确认停机的 instanceId 集合和运维证据编号；该工具可由运维重复/周期调用，原子 STARTED 条件更新允许多个恢复者竞争。AUTO instanceId 变化须使用旧节点身份及真实停机证据；远端、归属不明、其他应用记录不自动恢复。时间阈值只筛选候选记录，不是死亡证据。
 
 异步日志采用单消费者、容量或时间触发的 JDBC batch；批次事务失败后回滚，再隔离逐行失败，同身份同结果的重复 ID 可幂等接受。关闭先停止接收，最多等待 shutdown-flush-timeout-ms；超时后 queued 与 in-flight 均计入 unflushed，驱动忽略取消时后台写入仍可能继续。状态快照增加 accepted/persisted/in-flight，拒收和重排队失败计入 dropped，失败重试有上限且无额外无界 ID 缓存。默认日志 JdbcTemplate SQL 超时为 5 秒；连接获取/socket 超时仍需配置 DataSource/驱动。
+
+生产告警执行器使用单线程和容量 256 的有界队列，满时拒绝并增加 `AlertEventPublisher.getDroppedCount()`；不会通过 CallerRunsPolicy 阻塞任务。相同 job/type 的普通失败、日志管道和审计失败事件在 1 秒内合并，可查询 getCoalescedCount()。连续失败状态限 1024 任务、1 小时 TTL，成功清除；仅是本节点窗口，容量淘汰可能重新开始计数。自动配置下审计失败事件也走这个异步通道，存储主异常不受监听器异常影响。手工构造 publisher 且不提供 executor 的旧构造器保持同步兼容。

@@ -12,6 +12,8 @@ import java.time.LocalDateTime;
 public class JdbcReliableAuditService implements ReliableAuditService {
     private final TaskLogRepository repository;
     private final ApplicationEventPublisher eventPublisher;
+    private io.github.cococzl.coquartz.event.AlertEventPublisher alerts;
+    public void setAlertPublisher(io.github.cococzl.coquartz.event.AlertEventPublisher alerts) { this.alerts = alerts; }
 
     public JdbcReliableAuditService(TaskLogRepository repository) {
         this(repository, null);
@@ -60,6 +62,7 @@ public class JdbcReliableAuditService implements ReliableAuditService {
     }
 
     private void publish(TaskExecutionLog log, ReliableAuditFailureEvent.Phase phase) {
+        if (alerts != null) { alerts.publishAuditFailure(log.getJobKey(), phase); return; }
         if (eventPublisher == null) return;
         try {
             eventPublisher.publishEvent(new ReliableAuditFailureEvent(this, log.getJobKey(), phase));

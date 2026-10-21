@@ -127,8 +127,11 @@ public class CoQuartzJdbcAutoConfiguration {
     @Bean
     @ConditionalOnMissingBean(ReliableAuditService.class)
     public ReliableAuditService reliableAuditService(TaskLogRepository taskLogRepository,
-                                                     ApplicationEventPublisher eventPublisher) {
-        return new JdbcReliableAuditService(taskLogRepository, eventPublisher);
+                                                     ApplicationEventPublisher eventPublisher,
+                                                     ObjectProvider<AlertEventPublisher> alerts) {
+        var service = new JdbcReliableAuditService(taskLogRepository, eventPublisher);
+        service.setAlertPublisher(alerts.getIfAvailable());
+        return service;
     }
 
     @Bean
