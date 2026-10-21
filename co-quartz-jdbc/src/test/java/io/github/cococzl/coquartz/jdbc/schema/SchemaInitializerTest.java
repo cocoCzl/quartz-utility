@@ -25,7 +25,7 @@ class SchemaInitializerTest {
 
         assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM quartz_task_log WHERE id = 'legacy'", Integer.class)).isEqualTo(1);
         assertThat(jdbc.queryForObject("SELECT attempt FROM quartz_task_log WHERE id = 'legacy'", Integer.class)).isEqualTo(1);
-        assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM quartz_task_log_schema_history", Integer.class)).isEqualTo(2);
+        assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM quartz_task_log_schema_history", Integer.class)).isEqualTo(3);
     }
 
     @Test
@@ -52,7 +52,7 @@ class SchemaInitializerTest {
 
         new SchemaInitializer(log, properties).initialize();
 
-        assertThat(log.queryForObject("SELECT COUNT(*) FROM quartz_task_log_schema_history", Integer.class)).isEqualTo(2);
+        assertThat(log.queryForObject("SELECT COUNT(*) FROM quartz_task_log_schema_history", Integer.class)).isEqualTo(3);
         assertThat(application.query("SELECT table_name FROM information_schema.tables WHERE table_name = 'QUARTZ_TASK_LOG'", (rs, row) -> rs.getString(1))).isEmpty();
     }
 

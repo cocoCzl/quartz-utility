@@ -44,15 +44,17 @@ public class JdbcReliableAuditService implements ReliableAuditService {
 
     @Override
     public int recoverInterruptedBefore(LocalDateTime cutoff, String schedulerInstanceId, boolean clustered) {
+        return 0; // Legacy callers cannot provide stopped-node evidence; never close potentially live work.
+    }
+
+    @Override
+    public int recoverConfirmedStopped(LocalDateTime cutoff, io.github.cococzl.coquartz.service.AuditRecoveryScope scope) {
         int recovered = 0;
         for (TaskExecutionLog log : repository.findStartedBefore(cutoff)) {
-            // In a cluster we cannot prove a remote node has stopped from the log table alone.
-            // Leave remote ownership untouched; that node can finish its own lifecycle safely.
-            if (clustered && log.getSchedulerInstanceId() != null
-                    && !log.getSchedulerInstanceId().equals(schedulerInstanceId)) {
-                continue;
-            }
-            if (repository.markInterrupted(log.getId(), LocalDateTime.now())) recovered++;
+            if (!scope.applicationNamespace().equals(log.getApplicationNamespace())
+                    || !scope.schedulerName().equals(log.getSchedulerName())
+                    || !scope.confirmedStoppedInstances().contains(log.getSchedulerInstanceId())) continue;
+            if (repository.markInterrupted(log.getId(), LocalDateTime.now(java.time.ZoneOffset.UTC))) recovered++;
         }
         return recovered;
     }

@@ -32,6 +32,7 @@ public class SchemaInitializer {
         createHistoryTable();
         applyV1(dialect);
         applyV2(dialect);
+        applyV3();
     }
 
     private void createHistoryTable() {
@@ -58,6 +59,15 @@ public class SchemaInitializer {
         createIndex("idx_task_log_exec_state", "exec_state");
         createIndex("idx_task_log_execution_id", "execution_id");
         markApplied(2);
+    }
+
+    private void applyV3() {
+        if (isApplied(3)) return;
+        addColumnIfMissing("scheduler_name", "VARCHAR(200)");
+        addColumnIfMissing("application_namespace", "VARCHAR(200)");
+        addColumnIfMissing("origin_trigger_key", "VARCHAR(400)");
+        addColumnIfMissing("origin_scheduled_time", "BIGINT");
+        markApplied(3);
     }
 
     private void addColumnIfMissing(String column, String definition) {

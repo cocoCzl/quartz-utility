@@ -171,12 +171,16 @@ public class CoQuartzJobListener implements JobListener {
         taskLog.setJobKey(jobKey);
         taskLog.setTriggerKey(triggerKey);
         taskLog.setExecutionId(UUID.randomUUID().toString());
+        taskLog.setApplicationNamespace(properties.getScheduling().getApplicationNamespace());
+        taskLog.setOriginTriggerKey(triggerKey);
+        taskLog.setOriginScheduledTime(context.getScheduledFireTime() == null ? null : context.getScheduledFireTime().getTime());
         taskLog.setFireInstanceId(context.getFireInstanceId());
         taskLog.setDefinitionVersion(context.getJobDetail().getJobDataMap()
                 .getString(CoQuartzConstants.DEFINITION_VERSION));
         try {
             org.quartz.Scheduler scheduler = context.getScheduler();
             taskLog.setSchedulerInstanceId(scheduler == null ? "unknown" : scheduler.getSchedulerInstanceId());
+            taskLog.setSchedulerName(scheduler == null ? "unknown" : scheduler.getSchedulerName());
         } catch (org.quartz.SchedulerException e) {
             taskLog.setSchedulerInstanceId("unknown");
         }

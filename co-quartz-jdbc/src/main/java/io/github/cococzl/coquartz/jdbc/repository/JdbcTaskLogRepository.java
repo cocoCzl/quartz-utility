@@ -18,8 +18,8 @@ public class JdbcTaskLogRepository implements TaskLogRepository {
 
     private static final String INSERT_SQL = """
             INSERT INTO quartz_task_log (id, job_key, trigger_key, start_time, end_time, execution_time_ms,
-                exec_state, error_message, stack_trace, attempt, is_final_attempt, execute_time, execution_id, fire_instance_id, scheduler_instance_id, definition_version)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                exec_state, error_message, stack_trace, attempt, is_final_attempt, execute_time, execution_id, fire_instance_id, scheduler_instance_id, definition_version, scheduler_name, application_namespace, origin_trigger_key, origin_scheduled_time)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """;
 
     private static final String COUNT_SQL = "SELECT COUNT(*) FROM quartz_task_log";
@@ -72,6 +72,10 @@ public class JdbcTaskLogRepository implements TaskLogRepository {
         log.setFireInstanceId(rs.getString("fire_instance_id"));
         log.setSchedulerInstanceId(rs.getString("scheduler_instance_id"));
         log.setDefinitionVersion(rs.getString("definition_version"));
+        log.setSchedulerName(rs.getString("scheduler_name"));
+        log.setApplicationNamespace(rs.getString("application_namespace"));
+        log.setOriginTriggerKey(rs.getString("origin_trigger_key"));
+        log.setOriginScheduledTime(rs.getObject("origin_scheduled_time") == null ? null : rs.getLong("origin_scheduled_time"));
         log.setStartTime(rs.getTimestamp("start_time") != null ? rs.getTimestamp("start_time").toLocalDateTime() : null);
         log.setEndTime(rs.getTimestamp("end_time") != null ? rs.getTimestamp("end_time").toLocalDateTime() : null);
         log.setExecutionTimeMs(rs.getObject("execution_time_ms") != null ? rs.getLong("execution_time_ms") : null);
@@ -99,7 +103,8 @@ public class JdbcTaskLogRepository implements TaskLogRepository {
                 log.getAttempt(),
                 log.isFinalAttempt(),
                 log.getExecuteTime(), log.getExecutionId(), log.getFireInstanceId(),
-                log.getSchedulerInstanceId(), log.getDefinitionVersion()
+                log.getSchedulerInstanceId(), log.getDefinitionVersion(), log.getSchedulerName(), log.getApplicationNamespace(),
+                log.getOriginTriggerKey(), log.getOriginScheduledTime()
         );
     }
 
@@ -135,6 +140,8 @@ public class JdbcTaskLogRepository implements TaskLogRepository {
                 && java.util.Objects.equals(first.getFireInstanceId(), second.getFireInstanceId())
                 && java.util.Objects.equals(first.getSchedulerInstanceId(), second.getSchedulerInstanceId())
                 && java.util.Objects.equals(first.getDefinitionVersion(), second.getDefinitionVersion())
+                && java.util.Objects.equals(first.getSchedulerName(), second.getSchedulerName())
+                && java.util.Objects.equals(first.getApplicationNamespace(), second.getApplicationNamespace())
                 && first.getAttempt() == second.getAttempt();
     }
 

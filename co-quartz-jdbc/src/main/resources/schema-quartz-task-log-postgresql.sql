@@ -12,6 +12,8 @@ CREATE TABLE IF NOT EXISTS quartz_task_log (
     is_final_attempt BOOLEAN      NOT NULL DEFAULT TRUE,
     execute_time     TIMESTAMP     NOT NULL,
     execution_id     VARCHAR(36), fire_instance_id VARCHAR(200), scheduler_instance_id VARCHAR(200), definition_version VARCHAR(100),
+    scheduler_name VARCHAR(200), application_namespace VARCHAR(200),
+    origin_trigger_key VARCHAR(400), origin_scheduled_time BIGINT,
     PRIMARY KEY (id)
 );
 

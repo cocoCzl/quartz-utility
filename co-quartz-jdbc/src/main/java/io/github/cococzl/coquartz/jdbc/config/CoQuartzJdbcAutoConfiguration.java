@@ -131,12 +131,8 @@ public class CoQuartzJdbcAutoConfiguration {
     @ConditionalOnProperty(prefix = "co-quartz.log", name = "reliable-audit", havingValue = "true")
     public ApplicationRunner reliableAuditRecoveryRunner(Scheduler scheduler, ReliableAuditService reliableAuditService,
                                                          CoQuartzProperties properties) {
-        return args -> {
-            long thresholdMs = properties.getLog().getReliableAuditRecoveryThresholdMs();
-            if (thresholdMs <= 0) return;
-            reliableAuditService.recoverInterruptedBefore(java.time.LocalDateTime.now().minusNanos(thresholdMs * 1_000_000),
-                    scheduler.getSchedulerInstanceId(), scheduler.getMetaData().isJobStoreClustered());
-        };
+        return args -> org.slf4j.LoggerFactory.getLogger(CoQuartzJdbcAutoConfiguration.class).info(
+                "Reliable audit recovery requires explicit stopped-node evidence via recoverConfirmedStopped; no age-only recovery is performed");
     }
 
     @Bean

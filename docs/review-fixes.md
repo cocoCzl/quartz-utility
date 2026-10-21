@@ -73,3 +73,11 @@ unschedule 优先且不安排重试；增强任务 refireImmediately 归一到�
 确认成立。新增结构化/传输凭据及基础设施异常日志回归，修复前 11 项中 8 failures。修复后 `mvn -q -pl co-quartz-core -Dtest=DefaultLogSanitizerTest,EnhancedJobTest,AlertEventPublisherTest,CoQuartzJobListenerTest test` 通过。
 
 补 Bearer/Basic、JSON、URL 查询、JDBC/URI 凭据和大小写/cause 格式；普通诊断保持可读，扩展点保留。库受控基础设施日志不再把原 Throwable 直接传给 SLF4J；失败事件再次应用 sanitizer 并遵守 capture-stack-trace。README 明确最佳努力规则与业务/Quartz 原生日志边界，未提供改变异常类型的全局脱敏适配，不破坏原生控制标记。
+
+## R11
+
+确认成立。无停机证据的 local/null 归属恢复回归修复前失败。`mvn -q -pl co-quartz-jdbc -am -Dtest=JdbcReliableAuditServiceTest,JdbcTaskLogRepositoryTest,SchemaInitializerTest,QuartzJdbcRetryPersistenceTest -Dsurefire.failIfNoSpecifiedTests=false test`：22 通过。
+
+新增 V3 nullable 归属/原始 Trigger 字段及三方言升级 SQL。记录写入 applicationNamespace/schedulerName/instance/fire/execution，增强 STARTED/complete 复用同一身份。移除启动时 age-only 状态改写；旧 recoverInterruptedBefore 保留 API 但安全 no-op。新受控恢复入口要求 AuditRecoveryScope 明确停机节点与证据编号，仅恢复完全匹配归属；可重入并发恢复用 STARTED 条件更新。运维负责验证停机证据，不能把超龄或本机同 instanceId 视为已停止。
+
+未验证：真实多节点、AUTO 换号、外部运维证据系统。未引入靠时间判死的自动周期扫描。调用者可在获得证据后周期重试工具，短重启不会永久错过阈值。

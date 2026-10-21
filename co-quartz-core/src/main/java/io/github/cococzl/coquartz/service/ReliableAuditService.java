@@ -7,5 +7,10 @@ import java.time.LocalDateTime;
 public interface ReliableAuditService {
     void recordStarted(TaskExecutionLog log);
     void recordCompleted(TaskExecutionLog log);
+    default int recoverConfirmedStopped(LocalDateTime cutoff, AuditRecoveryScope scope) {
+        throw new UnsupportedOperationException("Evidence-based recovery is unavailable");
+    }
+    /** @deprecated A time threshold and instance id do not prove that a node has stopped. */
+    @Deprecated
     int recoverInterruptedBefore(LocalDateTime cutoff, String schedulerInstanceId, boolean clustered);
 }

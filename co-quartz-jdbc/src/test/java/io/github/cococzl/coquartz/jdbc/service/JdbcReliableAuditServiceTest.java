@@ -33,19 +33,33 @@ class JdbcReliableAuditServiceTest {
     }
 
     @Test
+    void legacyRecoveryWithoutStoppedNodeEvidenceLeavesEvenOldLocalAndUnknownRecordsUntouched() {
+        TaskLogRepository repository = mock(TaskLogRepository.class);
+        TaskExecutionLog local = new TaskExecutionLog(); local.setId("local"); local.setSchedulerInstanceId("node-a");
+        TaskExecutionLog unknown = new TaskExecutionLog(); unknown.setId("unknown");
+        when(repository.findStartedBefore(any())).thenReturn(List.of(local, unknown));
+        when(repository.markInterrupted(anyString(), any())).thenReturn(true);
+        int recovered = new JdbcReliableAuditService(repository).recoverInterruptedBefore(LocalDateTime.now(), "node-a", true);
+        org.assertj.core.api.Assertions.assertThat(recovered).isZero();
+        verify(repository, never()).markInterrupted(anyString(), any());
+    }
+
+    @Test
     void clusteredRecoveryLeavesRecordsOwnedByOtherNodesUntouched() {
         TaskLogRepository repository = mock(TaskLogRepository.class);
         TaskExecutionLog local = new TaskExecutionLog();
         local.setId("local");
         local.setSchedulerInstanceId("node-a");
+        local.setApplicationNamespace("app-a"); local.setSchedulerName("scheduler-a");
         TaskExecutionLog remote = new TaskExecutionLog();
         remote.setId("remote");
         remote.setSchedulerInstanceId("node-b");
         when(repository.findStartedBefore(any())).thenReturn(List.of(local, remote));
         when(repository.markInterrupted(eq("local"), any())).thenReturn(true);
 
-        int recovered = new JdbcReliableAuditService(repository).recoverInterruptedBefore(
-                LocalDateTime.now(), "node-a", true);
+        int recovered = new JdbcReliableAuditService(repository).recoverConfirmedStopped(
+                LocalDateTime.now(), new io.github.cococzl.coquartz.service.AuditRecoveryScope(
+                        "app-a", "scheduler-a", java.util.Set.of("node-a"), "operator confirmed node shutdown"));
 
         org.assertj.core.api.Assertions.assertThat(recovered).isEqualTo(1);
         verify(repository).markInterrupted(eq("local"), any());

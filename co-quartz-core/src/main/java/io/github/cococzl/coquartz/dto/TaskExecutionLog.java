@@ -12,6 +12,18 @@ public class TaskExecutionLog {
     private String executionId;
     private String fireInstanceId;
     private String schedulerInstanceId;
+    private String schedulerName;
+    private String applicationNamespace;
+    private String originTriggerKey;
+    private Long originScheduledTime;
+    public String getSchedulerName() { return schedulerName; }
+    public void setSchedulerName(String value) { schedulerName = value; }
+    public String getApplicationNamespace() { return applicationNamespace; }
+    public void setApplicationNamespace(String value) { applicationNamespace = value; }
+    public String getOriginTriggerKey() { return originTriggerKey; }
+    public void setOriginTriggerKey(String value) { originTriggerKey = value; }
+    public Long getOriginScheduledTime() { return originScheduledTime; }
+    public void setOriginScheduledTime(Long value) { originScheduledTime = value; }
     private String definitionVersion;
     private LocalDateTime startTime;
     private LocalDateTime endTime;

@@ -169,6 +169,9 @@ public class CoQuartzProperties implements InitializingBean {
     }
 
     public static class SchedulingConfig {
+        private String applicationNamespace = "default";
+        public String getApplicationNamespace() { return applicationNamespace; }
+        public void setApplicationNamespace(String value) { applicationNamespace = value; }
         private String defaultTimeZone = "UTC";
 
         public String getDefaultTimeZone() { return defaultTimeZone; }

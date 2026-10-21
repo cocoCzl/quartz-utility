@@ -367,6 +367,13 @@ public class EnhancedJob implements InterruptableJob {
 
     private void populateExecutionCorrelation(TaskExecutionLog taskLog, JobExecutionContext context, String executionId) {
         taskLog.setExecutionId(executionId);
+        taskLog.setApplicationNamespace(properties == null ? "default" : properties.getScheduling().getApplicationNamespace());
+        JobDataMap runtime = context.getMergedJobDataMap();
+        String origin = runtime == null ? null : runtime.getString(CoQuartzConstants.ORIGIN_TRIGGER_KEY);
+        taskLog.setOriginTriggerKey(origin == null ? context.getTrigger().getKey().toString() : origin);
+        Object scheduled = runtime == null ? null : runtime.get(CoQuartzConstants.ORIGIN_SCHEDULED_TIME);
+        taskLog.setOriginScheduledTime(scheduled instanceof Number number ? number.longValue()
+                : context.getScheduledFireTime() == null ? null : context.getScheduledFireTime().getTime());
         taskLog.setFireInstanceId(context.getFireInstanceId());
         JobDataMap jobDataMap = context.getJobDetail().getJobDataMap();
         taskLog.setDefinitionVersion(jobDataMap == null ? null
@@ -374,6 +381,7 @@ public class EnhancedJob implements InterruptableJob {
         try {
             Scheduler scheduler = context.getScheduler();
             taskLog.setSchedulerInstanceId(scheduler == null ? "unknown" : scheduler.getSchedulerInstanceId());
+            taskLog.setSchedulerName(scheduler == null ? "unknown" : scheduler.getSchedulerName());
         } catch (SchedulerException e) {
             taskLog.setSchedulerInstanceId("unknown");
         }
