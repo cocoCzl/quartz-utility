@@ -226,6 +226,12 @@ public class EnhancedJob implements InterruptableJob {
                     taskLog.setId(auditLog.getId());
                     try { completeReliableAudit(taskLog); }
                     catch (JobExecutionException auditFailure) {
+                        if (lastException instanceof JobExecutionException businessFailure) {
+                            auditFailure.setUnscheduleFiringTrigger(businessFailure.unscheduleFiringTrigger());
+                            auditFailure.setUnscheduleAllTriggers(businessFailure.unscheduleAllTriggers());
+                            auditFailure.setRefireImmediately(businessFailure.refireImmediately());
+                            auditFailure.addSuppressed(businessFailure);
+                        }
                         if (metrics != null) {
                             metrics.recordFailure(jobKey, executionTimeMs);
                             if (timedOut) metrics.recordTimeout(jobKey);

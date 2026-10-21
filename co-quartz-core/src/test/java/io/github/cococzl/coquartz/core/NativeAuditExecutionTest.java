@@ -21,6 +21,65 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.*;
 
 class NativeAuditExecutionTest {
+    public static class ControlJob implements Job {
+        static String control;
+        static final AtomicInteger calls = new AtomicInteger();
+        public void execute(JobExecutionContext context) throws JobExecutionException {
+            if (calls.incrementAndGet() > 1) return;
+            var error = new JobExecutionException("business control");
+            error.setUnscheduleFiringTrigger("firing".equals(control));
+            error.setUnscheduleAllTriggers("all".equals(control));
+            error.setRefireImmediately("refire".equals(control));
+            throw error;
+        }
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"firing", "all", "refire"})
+    void completionAuditFailurePreservesBusinessQuartzControl(String control) throws Exception {
+        var audit = mock(ReliableAuditService.class);
+        doThrow(new IllegalStateException("completion database unavailable")).when(audit).recordCompleted(any());
+        var beans = new StaticListableBeanFactory(); beans.addBean("audit", audit);
+        var properties = new CoQuartzProperties(); properties.getLog().setReliableAudit(true);
+        var factory = new CoQuartzJobFactory(); factory.setProperties(properties);
+        factory.setReliableAuditServiceProvider(beans.getBeanProvider(ReliableAuditService.class));
+        Scheduler scheduler = new BuilderScheduleRegressionTest().scheduler();
+        ControlJob.calls.set(0); ControlJob.control = control;
+        try {
+            scheduler.setJobFactory(factory);
+            var completed = new CountDownLatch("refire".equals(control) ? 2 : 1);
+            var firstError = new AtomicReference<JobExecutionException>();
+            scheduler.getListenerManager().addJobListener(new JobListenerSupport() {
+                public String getName() { return "control-completion"; }
+                public void jobWasExecuted(JobExecutionContext context, JobExecutionException error) {
+                    firstError.compareAndSet(null, error); completed.countDown();
+                }
+            });
+            var job = JobBuilder.newJob(ControlJob.class).withIdentity("control").build();
+            var firing = TriggerBuilder.newTrigger().withIdentity("firing").forJob(job)
+                    .withSchedule(SimpleScheduleBuilder.repeatSecondlyForever(3600)).build();
+            var other = TriggerBuilder.newTrigger().withIdentity("other").forJob(job)
+                    .startAt(new java.util.Date(System.currentTimeMillis() + 3600000)).build();
+            scheduler.scheduleJob(job, java.util.Set.of(firing, other), false);
+            scheduler.start();
+            assertThat(completed.await(3, TimeUnit.SECONDS)).isTrue();
+            assertThat(ControlJob.calls).hasValue("refire".equals(control) ? 2 : 1);
+            assertThat(firstError.get().unscheduleFiringTrigger()).isEqualTo("firing".equals(control));
+            assertThat(firstError.get().unscheduleAllTriggers()).isEqualTo("all".equals(control));
+            assertThat(firstError.get().refireImmediately()).isEqualTo("refire".equals(control));
+            var logs = org.mockito.ArgumentCaptor.forClass(io.github.cococzl.coquartz.dto.TaskExecutionLog.class);
+            verify(audit, times("refire".equals(control) ? 2 : 1)).recordCompleted(logs.capture());
+            if (!"refire".equals(control)) {
+                long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(2);
+                while (scheduler.getTriggerState(firing.getKey()) != Trigger.TriggerState.COMPLETE
+                        && System.nanoTime() < deadline) Thread.sleep(10);
+                assertThat(scheduler.getTriggerState(firing.getKey())).isEqualTo(Trigger.TriggerState.COMPLETE);
+                assertThat(scheduler.getTriggerState(other.getKey()))
+                        .isEqualTo("firing".equals(control) ? Trigger.TriggerState.NORMAL : Trigger.TriggerState.COMPLETE);
+                assertThat(logs.getValue().getExecState()).isEqualTo(io.github.cococzl.coquartz.enums.LogTaskExecStateEnum.FAIL);
+            }
+        } finally { if (!scheduler.isShutdown()) scheduler.shutdown(true); }
+    }
     public static class RefiringNativeJob implements Job {
         static final AtomicInteger executions = new AtomicInteger();
         static final AtomicInteger destroyed = new AtomicInteger();
