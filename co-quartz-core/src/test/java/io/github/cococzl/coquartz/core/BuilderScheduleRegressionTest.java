@@ -46,6 +46,25 @@ class BuilderScheduleRegressionTest {
                 .isEqualTo(JobKey.jobKey("same", "second"));
     }
 
+    @Test void legacyDefaultTriggerGroupMustBeExplicitBeforeUpdatingGroupedTask() throws Exception {
+        builder("legacy").jobGroup("orders").triggerGroup("DEFAULT").schedule(scheduler());
+        JobKey key = JobKey.jobKey("legacy", "orders");
+        JobDetail previous = scheduler.getJobDetail(key);
+        var legacyData = new JobDataMap(previous.getJobDataMap());
+        legacyData.remove(CoQuartzConstants.MAIN_TRIGGER_KEY);
+        scheduler.addJob(previous.getJobBuilder().setJobData(legacyData).build(), true, true);
+        assertThatThrownBy(() -> builder("legacy").jobGroup("orders").intervalInSeconds(120).schedule(scheduler))
+                .isInstanceOf(io.github.cococzl.coquartz.exception.CoQuartzSchedulingException.class)
+                .hasMessageContaining("triggerGroup");
+        assertThat(scheduler.getTriggersOfJob(key)).hasSize(1);
+        assertThat(scheduler.getJobDetail(key).getJobDataMap()).isEqualTo(legacyData);
+        builder("legacy").jobGroup("orders").triggerGroup("DEFAULT").intervalInSeconds(120).schedule(scheduler);
+        assertThat(scheduler.getTriggersOfJob(key)).hasSize(1);
+        assertThat(((SimpleTrigger) scheduler.getTrigger(TriggerKey.triggerKey("TRIGGER_legacy"))).getRepeatInterval())
+                .isEqualTo(120000);
+        assertThat(scheduler.getJobDetail(key).isDurable()).isFalse();
+    }
+
     @Test void builderCannotOverwriteCodeOwnedOrExternalTasks() throws Exception {
         for (boolean codeOwned : new boolean[]{true, false}) {
             String name = codeOwned ? "code" : "external";

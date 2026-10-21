@@ -159,6 +159,13 @@ public class QuartzTaskBuilder {
             TaskIdentityPolicy.assertDynamic(previous);
             TaskIdentityPolicy.assertTriggerTarget(scheduler, trigger.getKey(), jobDetail.getKey());
             if (previous == null) return scheduler.scheduleJob(jobDetail, trigger);
+            if (!CoQuartzConstants.DEFAULT_GROUP.equals(trigger.getKey().getGroup())) {
+                Trigger legacy = scheduler.getTrigger(TriggerKey.triggerKey(trigger.getKey().getName(), CoQuartzConstants.DEFAULT_GROUP));
+                if (legacy != null && jobDetail.getKey().equals(legacy.getJobKey())) {
+                    throw new CoQuartzSchedulingException("Existing DEFAULT-group trigger would create a duplicate plan; "
+                            + "specify triggerGroup(\"DEFAULT\") or explicitly migrate the trigger while drained and in standby");
+                }
+            }
             boolean paused = previous != null
                     && scheduler.getTriggerState(trigger.getKey()) == Trigger.TriggerState.PAUSED;
             // JobStore persists this job/trigger replacement in one operation, including non-durable jobs.
