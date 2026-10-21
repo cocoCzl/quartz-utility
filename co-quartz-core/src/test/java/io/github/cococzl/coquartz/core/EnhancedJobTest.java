@@ -327,6 +327,46 @@ class EnhancedJobTest {
     }
 
     @Test
+    void retryPreservesBusinessPayloadAndDropsReservedOverrides() throws Exception {
+        enhancedConfig.put(CoQuartzConstants.RETRY_TIMES, 1);
+        JobDataMap data = new JobDataMap();
+        data.put("orderId", "order-42");
+        data.put(CoQuartzConstants.TIMEOUT, 999999);
+        when(context.getMergedJobDataMap()).thenReturn(data);
+        doThrow(new JobExecutionException("failure")).when(delegate).execute(context);
+        createEnhancedJob().execute(context);
+        var captor = ArgumentCaptor.forClass(Trigger.class);
+        verify(scheduler).scheduleJob(captor.capture());
+        assertThat(captor.getValue().getJobDataMap()).containsEntry("orderId", "order-42")
+                .doesNotContainKey(CoQuartzConstants.TIMEOUT);
+    }
+
+    @Test
+    void unscheduleTakesPrecedenceOverDelayedRetryWithAndWithoutTimeout() throws Exception {
+        enhancedConfig.put(CoQuartzConstants.RETRY_TIMES, 3);
+        JobExecutionException stop = new JobExecutionException("stop");
+        stop.setUnscheduleAllTriggers(true);
+        doThrow(stop).when(delegate).execute(context);
+        for (long timeout : new long[]{0, 1000}) {
+            enhancedConfig.put(CoQuartzConstants.TIMEOUT, timeout);
+            assertThatThrownBy(() -> createEnhancedJob().execute(context)).isSameAs(stop);
+        }
+        verify(scheduler, never()).scheduleJob(any(Trigger.class));
+    }
+
+    @Test
+    void schedulingFailureProducesFinalFailedAttempt() throws Exception {
+        enhancedConfig.put(CoQuartzConstants.RETRY_TIMES, 1);
+        doThrow(new JobExecutionException("business failure")).when(delegate).execute(context);
+        when(scheduler.scheduleJob(any(Trigger.class))).thenThrow(new SchedulerException("store unavailable"));
+        assertThatThrownBy(() -> createEnhancedJob().execute(context)).isInstanceOf(JobExecutionException.class)
+                .hasMessageContaining("retry");
+        verify(asyncTaskLogService).write(argThat(entry -> entry.isFinalAttempt()
+                && entry.getErrorMessage().contains("Retry scheduling failed")
+                && entry.getErrorMessage().contains("business failure")));
+    }
+
+    @Test
     void execute_withExponentialBackoff_increasesDelay() {
         RetryContext ctx = new RetryContext(2, 100, true, 2.0);
         assertThat(ctx.getNextRetryDelay()).isEqualTo(100);

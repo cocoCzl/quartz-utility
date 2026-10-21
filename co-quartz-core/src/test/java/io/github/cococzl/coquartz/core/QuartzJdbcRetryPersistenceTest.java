@@ -58,7 +58,9 @@ class QuartzJdbcRetryPersistenceTest {
         Scheduler first = scheduler("first");
         registerDeclarative(first);
         first.start();
-        first.triggerJob(JobKey.jobKey("persistentRetry", "DEFAULT"));
+        org.quartz.JobDataMap triggerData = new org.quartz.JobDataMap();
+        triggerData.put("orderId", "order-42");
+        first.triggerJob(JobKey.jobKey("persistentRetry", "DEFAULT"), triggerData);
         assertThat(FailOnceJob.firstAttempt.await(5, TimeUnit.SECONDS)).isTrue();
         long retryDeadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(3);
         boolean retryPersisted;
@@ -80,7 +82,9 @@ class QuartzJdbcRetryPersistenceTest {
         long logsDeadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(3);
         while (logs.entries.size() < 2 && System.nanoTime() < logsDeadline) Thread.sleep(20);
 
+        assertThat(FailOnceJob.payloads).containsExactly("order-42", "order-42");
         assertThat(logs.entries).hasSize(2);
+        assertThat(logs.entries.get(1).getTriggerKey()).isEqualTo(logs.entries.get(0).getTriggerKey());
         assertThat(logs.entries).extracting(TaskExecutionLog::getExecutionId).doesNotContainNull();
         // Both attempts are part of one execution, so the single execution id must repeat.
         assertThat(logs.entries.get(0).getExecutionId()).isEqualTo(logs.entries.get(1).getExecutionId());
@@ -165,18 +169,21 @@ class QuartzJdbcRetryPersistenceTest {
     @io.github.cococzl.coquartz.annotation.QuartzJob(name = "persistentRetry",
             cron = "0 0 0 1 1 ? 2099", retryTimes = 1, retryInterval = 2000)
     static class FailOnceJob implements Job {
+        static final List<String> payloads = new CopyOnWriteArrayList<>();
         static final AtomicInteger executions = new AtomicInteger();
         static CountDownLatch firstAttempt;
         static CountDownLatch secondAttempt;
 
         static void reset() {
             executions.set(0);
+            payloads.clear();
             firstAttempt = new CountDownLatch(1);
             secondAttempt = new CountDownLatch(1);
         }
 
         @Override
         public void execute(JobExecutionContext context) throws JobExecutionException {
+            payloads.add(context.getMergedJobDataMap().getString("orderId"));
             if (executions.incrementAndGet() == 1) {
                 firstAttempt.countDown();
                 throw new JobExecutionException("first attempt fails");

@@ -155,9 +155,27 @@ public class EnhancedJob implements Job {
 
                 long executionTimeMs = System.currentTimeMillis() - startMs;
                 LocalDateTime endTime = LocalDateTime.now();
-                String triggerKey = context.getTrigger().getKey().toString();
+                String triggerKey = runtimeData.getString(CoQuartzConstants.ORIGIN_TRIGGER_KEY);
+                if (triggerKey == null) triggerKey = context.getTrigger().getKey().toString();
 
-                boolean noMoreRetries = attempt > retryTimes;
+                boolean nativeStop = lastException instanceof JobExecutionException nativeError
+                        && (nativeError.unscheduleAllTriggers() || nativeError.unscheduleFiringTrigger());
+                if (lastException instanceof JobExecutionException nativeError) nativeError.setRefireImmediately(false);
+                boolean noMoreRetries = attempt > retryTimes || nativeStop;
+                if (execState == LogTaskExecStateEnum.FAIL && !noMoreRetries) {
+                    try {
+                        for (int index = 1; index < attempt; index++) retryContext.getNextRetryDelay();
+                        scheduleRetry(context, executionId, attempt + 1, retryContext.getNextRetryDelay());
+                        if (metrics != null) metrics.recordRetry(jobKey);
+                    } catch (Exception scheduleFailure) {
+                        noMoreRetries = true;
+                        errorMessage = sanitize("Retry scheduling failed; business failure: " + errorMessage
+                                + "; scheduling failure: " + scheduleFailure.getMessage(), 500);
+                        JobExecutionException terminal = new JobExecutionException("Failed to schedule delayed retry", scheduleFailure);
+                        if (lastException != null) terminal.addSuppressed(lastException);
+                        lastException = terminal;
+                    }
+                }
 
                 TaskExecutionLog taskLog;
                 if (execState == LogTaskExecStateEnum.SUCCESS) {
@@ -215,16 +233,7 @@ public class EnhancedJob implements Job {
                     throw new JobExecutionException(lastException);
                 }
 
-                try {
-                    for (int index = 1; index < attempt; index++) {
-                        retryContext.getNextRetryDelay();
-                    }
-                    scheduleRetry(context, executionId, attempt + 1, retryContext.getNextRetryDelay());
-                    if (metrics != null) metrics.recordRetry(jobKey);
-                    return;
-                } catch (SchedulerException scheduleFailure) {
-                    throw new JobExecutionException("Failed to schedule delayed retry", scheduleFailure);
-                }
+                return;
             }
         } finally {
             if (metrics != null) {
@@ -276,6 +285,8 @@ public class EnhancedJob implements Job {
                 }
             }
         }
+        if (failure instanceof JobExecutionException nativeError
+                && (nativeError.unscheduleAllTriggers() || nativeError.unscheduleFiringTrigger())) throw nativeError;
         if (state[1]) throw new TaskTimeoutException(timeoutMs, true);
         if (failure != null) throw failure;
     }
@@ -344,7 +355,16 @@ public class EnhancedJob implements Job {
 
     private void scheduleRetry(JobExecutionContext context, String executionId, int nextAttempt, long delayMs)
             throws SchedulerException {
-        JobDataMap data = new JobDataMap();
+        JobDataMap data;
+        try { data = RetryPayloadSnapshot.copy(context.getMergedJobDataMap()); }
+        catch (java.io.IOException invalid) { throw new SchedulerException("Invalid retry payload", invalid); }
+        JobDataMap runtime = context.getMergedJobDataMap();
+        Object origin = runtime == null ? null : runtime.get(CoQuartzConstants.ORIGIN_TRIGGER_KEY);
+        Object scheduled = runtime == null ? null : runtime.get(CoQuartzConstants.ORIGIN_SCHEDULED_TIME);
+        data.put(CoQuartzConstants.ORIGIN_TRIGGER_KEY, origin == null ? context.getTrigger().getKey().toString() : origin);
+        data.put(CoQuartzConstants.ORIGIN_SCHEDULED_TIME, scheduled == null
+                ? (context.getScheduledFireTime() == null ? (context.getTrigger().getStartTime() == null ? 0L : context.getTrigger().getStartTime().getTime())
+                : context.getScheduledFireTime().getTime()) : scheduled);
         data.put(CoQuartzConstants.OWNER, CoQuartzConstants.OWNER_VALUE);
         data.put(CoQuartzConstants.METADATA_VERSION, CoQuartzConstants.METADATA_VERSION_VALUE);
         data.put(CoQuartzConstants.RETRY_JOB_KEY, context.getJobDetail().getKey().toString());

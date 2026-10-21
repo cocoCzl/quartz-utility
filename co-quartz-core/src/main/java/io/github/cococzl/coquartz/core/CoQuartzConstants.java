@@ -30,6 +30,8 @@ public final class CoQuartzConstants {
     /** Original application Job class when Quartz schedules the non-concurrent proxy. */
     public static final String DELEGATE_JOB_CLASS = PREFIX + "delegateJobClass";
     public static final String RETRY_EXECUTION_ID = PREFIX + "retryExecutionId";
+    public static final String ORIGIN_TRIGGER_KEY = PREFIX + "originTriggerKey";
+    public static final String ORIGIN_SCHEDULED_TIME = PREFIX + "originScheduledTime";
     public static final String RETRY_JOB_KEY = PREFIX + "retryJobKey";
     public static final String RETRY_ATTEMPT = PREFIX + "retryAttempt";
     public static final String RETRY_TRIGGER_GROUP = "CO_QUARTZ_RETRY";

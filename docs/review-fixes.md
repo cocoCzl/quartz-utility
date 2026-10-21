@@ -37,3 +37,11 @@ CoQuartzJobFactory 在 reliable-audit 模式下也装饰原生 Job。开始失�
 确认成立。新增 4 个真实 RAM 场景修复前为 3 failures、1 error。共享 TaskIdentityPolicy 统一 code-owned 保护、Builder 动态所有权、保留组及 Trigger 目标校验；冲突校验在写入前完成。默认 Trigger group 跟随 Job group。executeNow 明确为创建一次任务，已存在时拒绝并指引使用 Scheduler.triggerJob/管理 API 触发存储定义，默认一次性 Trigger 使用 UUID，避免固定身份冲突。
 
 `mvn -q -pl co-quartz-core -Dtest=BuilderScheduleRegressionTest,QuartzTaskBuilderTest,TaskAdminServiceTest,QuartzJobReconciliationTest test` 通过。原生 Scheduler 是明确低层 API，不接管其权限。多个写者同时改变同一 JobKey 的所有权不支持，需应用级单写者；不会通过删除他人任务实现幂等。
+
+## R06
+
+确认成立。3 个新增回归修复前 3 failures；`mvn -q -pl co-quartz-core -Dtest=EnhancedJobTest,QuartzJdbcRetryPersistenceTest test` 修复后 21 通过，包含 H2 JDBC 重启后的 orderId、executionId、attempt 与初始 Trigger 关联。
+
+触发业务数据快照排除 co-quartz 保留键，仅支持内建标量、UUID、部分 java.time、BigDecimal/BigInteger、Date 和 byte[]；最多 128 键、键 128 字符、String 16384 字符、序列化合计 64KiB，不支持运行时 Bean/连接/任意 Serializable 图。重试 Trigger 持久化 originTriggerKey/originScheduledTime；任务日志 triggerKey 采用原始 Trigger，实际尝试仍以 fireInstanceId 区分。R02 的同步线程模型消除了 Future/CompletionException 包装导致的原生标记丢失。
+
+unschedule 优先且不安排重试；增强任务 refireImmediately 归一到框架有限重试，不保留原生立即循环；普通原生未增强任务维持 Quartz 行为。调度重试先于结果持久化，调度失败记录最终失败和独立诊断，保留业务异常作为 suppressed，不再写虚假的非终态。调度与日志数据库不是同一事务，不承诺 exactly-once。
