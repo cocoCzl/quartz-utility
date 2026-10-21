@@ -155,15 +155,13 @@ public class QuartzTaskBuilder {
             JobDetail jobDetail = buildJobDetail();
             Trigger trigger = buildTrigger();
 
-            if (scheduler.checkExists(jobDetail.getKey())) {
-                scheduler.addJob(jobDetail, true);
-                Date rescheduled = scheduler.rescheduleJob(trigger.getKey(), trigger);
-                if (rescheduled == null) {
-                    return scheduler.scheduleJob(trigger);
-                }
-            } else {
-                return scheduler.scheduleJob(jobDetail, trigger);
-            }
+            JobDetail previous = scheduler.getJobDetail(jobDetail.getKey());
+            if (previous == null) return scheduler.scheduleJob(jobDetail, trigger);
+            boolean paused = previous != null
+                    && scheduler.getTriggerState(trigger.getKey()) == Trigger.TriggerState.PAUSED;
+            // JobStore persists this job/trigger replacement in one operation, including non-durable jobs.
+            scheduler.scheduleJobs(java.util.Map.of(jobDetail, java.util.Set.of(trigger)), previous != null);
+            if (paused) scheduler.pauseTrigger(trigger.getKey());
             return trigger.getNextFireTime();
         } catch (SchedulerException e) {
             throw new CoQuartzSchedulingException("Failed to schedule job: " + jobName, e);

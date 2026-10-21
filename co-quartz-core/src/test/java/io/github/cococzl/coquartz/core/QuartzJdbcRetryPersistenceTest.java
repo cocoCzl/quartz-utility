@@ -32,7 +32,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 class QuartzJdbcRetryPersistenceTest {
 
-    private static final String DATABASE_URL = "jdbc:h2:mem:retry-persistence;DB_CLOSE_DELAY=-1";
+    private final String DATABASE_URL = "jdbc:h2:mem:retry-" + java.util.UUID.randomUUID() + ";DB_CLOSE_DELAY=-1";
 
     private final List<Scheduler> schedulers = new CopyOnWriteArrayList<>();
     private final ExecutorService timeoutExecutor = Executors.newSingleThreadExecutor();
@@ -88,6 +88,20 @@ class QuartzJdbcRetryPersistenceTest {
         assertThat(logs.entries).extracting(TaskExecutionLog::isFinalAttempt).containsExactly(false, true);
     }
 
+    @Test
+    void jdbcDefaultNonDurableBuilderUpdateIsAtomicAtJobStoreBoundary() throws Exception {
+        Scheduler scheduler = scheduler("update");
+        QuartzTaskBuilder.newBuilder().jobClass(FailOnceJob.class).jobName("update")
+                .intervalInSeconds(3600).schedule(scheduler);
+        QuartzTaskBuilder.newBuilder().jobClass(FailOnceJob.class).jobName("update")
+                .intervalInSeconds(120).jobData("payload", "updated").schedule(scheduler);
+        assertThat(scheduler.getJobDetail(JobKey.jobKey("update")).isDurable()).isFalse();
+        assertThat(scheduler.getJobDetail(JobKey.jobKey("update")).getJobDataMap().getString("payload"))
+                .isEqualTo("updated");
+        assertThat(((org.quartz.SimpleTrigger) scheduler.getTrigger(org.quartz.TriggerKey.triggerKey("TRIGGER_update")))
+                .getRepeatInterval()).isEqualTo(120000);
+    }
+
     private Scheduler scheduler(String instanceId) throws Exception {
         Properties properties = new Properties();
         properties.setProperty("org.quartz.scheduler.instanceName", "retryPersistence");
@@ -123,7 +137,7 @@ class QuartzJdbcRetryPersistenceTest {
         };
     }
 
-    private static void initialiseQuartzSchema() throws Exception {
+    private void initialiseQuartzSchema() throws Exception {
         String sql;
         try (var input = StdSchedulerFactory.class.getResourceAsStream(
                 "/org/quartz/impl/jdbcjobstore/tables_h2.sql")) {

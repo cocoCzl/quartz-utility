@@ -25,3 +25,9 @@
 CoQuartzJobFactory 在 reliable-audit 模式下也装饰原生 Job。开始失败不执行业务；完成失败作为 JobExecutionException 返回，绝不自动重跑已成功业务。Listener 不写可靠审计、不抛异常控制执行，且增强判断统一解析 true，enhanced=false 不再被跳过。未采用该工厂的自定义 Scheduler 不在可靠审计支持范围，启动校验在后续生命周期项处理。
 
 未验证：真实 JDBC 审计数据库断连、外部自定义 JobFactory。RAM 已验证 Quartz 正常清理并将周期 Trigger 恢复 NORMAL。
+
+## R04
+
+确认成立。真实 RAM 默认非 durable 更新回归修复前 1 error（Jobs added with no trigger must be durable）。改用 `scheduleJobs(Map<JobDetail,Set<Trigger>>, replace)`，Job 和主 Trigger 在一次 JobStore 存储事务中替换，不强制 durable，也无需处理 rescheduleJob 的 null 分支。补 RAM 丢失 Trigger、暂停状态、数据更新及 H2 JDBC 更新回归，并将原先验证错误 API 调用的 mock 测试改为真实 Scheduler 行为断言。
+
+`mvn -q -pl co-quartz-core -Dtest=BuilderScheduleRegressionTest,QuartzTaskBuilderTest,QuartzJdbcRetryPersistenceTest test`：21 通过。暂停恢复仍是后续独立 API，运行中跨节点暂停重调度的窗口不在本项宣称解决（见 R14）。

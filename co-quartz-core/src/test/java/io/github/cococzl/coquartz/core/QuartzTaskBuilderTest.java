@@ -190,31 +190,28 @@ class QuartzTaskBuilderTest {
 
     @Test
     void schedule_existingJob_reschedules() throws Exception {
-        Scheduler scheduler = mock(Scheduler.class);
-        when(scheduler.checkExists(any(JobKey.class))).thenReturn(true);
-        when(scheduler.rescheduleJob(any(TriggerKey.class), any(Trigger.class))).thenReturn(new Date());
-
-        QuartzTaskBuilder.newBuilder()
-                .jobClass(SampleJob.class)
-                .jobName("testJob")
-                .cron("0 0 * * * ?")
-                .schedule(scheduler);
-
-        verify(scheduler).addJob(any(JobDetail.class), eq(true));
-        verify(scheduler).rescheduleJob(any(TriggerKey.class), any(Trigger.class));
+        var support = new BuilderScheduleRegressionTest();
+        Scheduler scheduler = support.scheduler();
+        try {
+            support.builder("update").schedule(scheduler);
+            support.builder("update").intervalInSeconds(120).schedule(scheduler);
+            assertThat(((SimpleTrigger) scheduler.getTrigger(TriggerKey.triggerKey("TRIGGER_update")))
+                    .getRepeatInterval()).isEqualTo(120000);
+            assertThat(scheduler.getJobDetail(JobKey.jobKey("update")).isDurable()).isFalse();
+        } finally { scheduler.shutdown(true); }
     }
 
     @Test
     void schedule_existingJobWithoutTrigger_createsTrigger() throws Exception {
-        Scheduler scheduler = mock(Scheduler.class);
-        when(scheduler.checkExists(any(JobKey.class))).thenReturn(true);
-        when(scheduler.rescheduleJob(any(TriggerKey.class), any(Trigger.class))).thenReturn(null);
-        when(scheduler.scheduleJob(any(Trigger.class))).thenReturn(new Date());
-
-        QuartzTaskBuilder.newBuilder().jobClass(SampleJob.class).jobName("testJob")
-                .cron("0 0 * * * ?").schedule(scheduler);
-
-        verify(scheduler).scheduleJob(any(Trigger.class));
+        var support = new BuilderScheduleRegressionTest();
+        Scheduler scheduler = support.scheduler();
+        try {
+            support.builder("orphan").durable(true).schedule(scheduler);
+            scheduler.unscheduleJob(TriggerKey.triggerKey("TRIGGER_orphan"));
+            support.builder("orphan").schedule(scheduler);
+            assertThat(scheduler.getTriggersOfJob(JobKey.jobKey("orphan"))).hasSize(1);
+            assertThat(scheduler.getJobDetail(JobKey.jobKey("orphan")).isDurable()).isFalse();
+        } finally { scheduler.shutdown(true); }
     }
 
     @Test
