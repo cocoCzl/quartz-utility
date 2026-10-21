@@ -19,7 +19,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 
-import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.*;
 
 class JdbcTaskLogRepositoryTest {
 
@@ -97,6 +97,25 @@ class JdbcTaskLogRepositoryTest {
         assertThat(logs.get(0).getExecState()).isEqualTo(LogTaskExecStateEnum.SUCCESS);
         assertThat(logs.get(0).getExecutionTimeMs()).isEqualTo(42L);
         assertThat(logs.get(0).isFinalAttempt()).isTrue();
+    }
+
+    @Test
+    void auditCompletionRejectsMissingRecordAndConflictingTerminalOrIdentity() {
+        var missing = createLog("audit", LogTaskExecStateEnum.SUCCESS, 1, true);
+        assertThatThrownBy(() -> repository.updateLifecycle(missing)).isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("missing");
+        var completed = createLog("audit", LogTaskExecStateEnum.SUCCESS, 1, true);
+        repository.insert(completed);
+        completed.setExecState(LogTaskExecStateEnum.FAIL);
+        assertThatThrownBy(() -> repository.updateLifecycle(completed)).isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("conflict");
+        var started = createLog("audit", LogTaskExecStateEnum.STARTED, 1, false);
+        repository.insert(started);
+        started.setExecState(LogTaskExecStateEnum.SUCCESS);
+        started.setExecutionId("different-execution");
+        assertThatThrownBy(() -> repository.updateLifecycle(started)).isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("identity");
+        assertThat(repository.findStartedBefore(LocalDateTime.now())).hasSize(1);
     }
 
     @Test

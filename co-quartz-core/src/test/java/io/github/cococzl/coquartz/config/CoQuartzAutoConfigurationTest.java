@@ -34,6 +34,18 @@ class CoQuartzAutoConfigurationTest {
     }
 
     @Test
+    void reliableAuditWithoutServiceFailsAtStartup() {
+        new ApplicationContextRunner().withConfiguration(AutoConfigurations.of(
+                QuartzAutoConfiguration.class, CoQuartzCoreAutoConfiguration.class))
+                .withPropertyValues("spring.quartz.auto-startup=false", "co-quartz.annotation.enabled=false",
+                        "co-quartz.log.reliable-audit=true", "co-quartz.log.enabled=true")
+                .run(context -> {
+                    assertThat(context).hasFailed();
+                    assertThat(context.getStartupFailure()).hasMessageContaining("ReliableAuditService");
+                });
+    }
+
+    @Test
     void monitoringDisabledBacksOffFromMicrometerMetrics() {
         new ApplicationContextRunner()
                 .withConfiguration(AutoConfigurations.of(CoQuartzMicrometerAutoConfiguration.class))

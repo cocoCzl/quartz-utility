@@ -96,6 +96,17 @@ public class CoQuartzCoreAutoConfiguration {
     }
 
     @Bean
+    public org.springframework.beans.factory.SmartInitializingSingleton reliableAuditValidator(
+            CoQuartzProperties properties, ObjectProvider<ReliableAuditService> audit) {
+        return () -> {
+            if (properties.getLog().isReliableAudit() && audit.getIfAvailable() == null) {
+                throw new io.github.cococzl.coquartz.exception.CoQuartzConfigurationException(
+                        "reliable-audit requires an available ReliableAuditService");
+            }
+        };
+    }
+
+    @Bean
     @ConditionalOnMissingBean(LogSanitizer.class)
     public LogSanitizer coQuartzLogSanitizer() {
         return new DefaultLogSanitizer();

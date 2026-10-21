@@ -26,6 +26,9 @@ public class JdbcTaskLogRepository implements TaskLogRepository {
     private static final String UPDATE_LIFECYCLE_SQL = """
             UPDATE quartz_task_log SET end_time = ?, execution_time_ms = ?, exec_state = ?, error_message = ?, stack_trace = ?, is_final_attempt = ?
             WHERE id = ? AND exec_state = ?
+              AND job_key = ? AND attempt = ?
+              AND (execution_id = ? OR (execution_id IS NULL AND ? IS NULL))
+              AND (fire_instance_id = ? OR (fire_instance_id IS NULL AND ? IS NULL))
             """;
     private static final String FIND_STARTED_BEFORE_SQL = "SELECT * FROM quartz_task_log WHERE exec_state = ? AND start_time < ?";
     private static final String MARK_INTERRUPTED_SQL = """
@@ -102,10 +105,47 @@ public class JdbcTaskLogRepository implements TaskLogRepository {
 
     @Override
     public void updateLifecycle(TaskExecutionLog log) {
-        jdbcTemplate.update(UPDATE_LIFECYCLE_SQL, log.getEndTime(), log.getExecutionTimeMs(),
-                log.getExecState() == null ? LogTaskExecStateEnum.UNKNOWN.getCode() : log.getExecState().getCode(),
-                log.getErrorMessage(), log.getStackTrace(), log.isFinalAttempt(), log.getId(),
-                LogTaskExecStateEnum.STARTED.getCode());
+        if (log.getExecState() == null || log.getExecState() == LogTaskExecStateEnum.STARTED
+                || log.getExecState() == LogTaskExecStateEnum.UNKNOWN || log.getEndTime() == null) {
+            throw new IllegalArgumentException("Audit completion requires a terminal result and end time");
+        }
+        TaskExecutionLog stored = lifecycleRecord(log.getId());
+        if (!sameIdentity(stored, log)) throw new IllegalStateException("Audit execution identity mismatch: " + log.getId());
+        if (stored.getExecState() != LogTaskExecStateEnum.STARTED) {
+            assertSameCompletion(stored, log);
+            return;
+        }
+        int affected = jdbcTemplate.update(UPDATE_LIFECYCLE_SQL, log.getEndTime(), log.getExecutionTimeMs(),
+                log.getExecState().getCode(), log.getErrorMessage(), log.getStackTrace(), log.isFinalAttempt(),
+                log.getId(), LogTaskExecStateEnum.STARTED.getCode(), log.getJobKey(), log.getAttempt(),
+                log.getExecutionId(), log.getExecutionId(), log.getFireInstanceId(), log.getFireInstanceId());
+        if (affected != 1) assertSameCompletion(lifecycleRecord(log.getId()), log);
+    }
+
+    private TaskExecutionLog lifecycleRecord(String id) {
+        var records = jdbcTemplate.query("SELECT * FROM quartz_task_log WHERE id = ?", ROW_MAPPER, id);
+        if (records.isEmpty()) throw new IllegalStateException("Audit record missing: " + id);
+        return records.get(0);
+    }
+
+    private boolean sameIdentity(TaskExecutionLog first, TaskExecutionLog second) {
+        return java.util.Objects.equals(first.getJobKey(), second.getJobKey())
+                && java.util.Objects.equals(first.getTriggerKey(), second.getTriggerKey())
+                && java.util.Objects.equals(first.getExecutionId(), second.getExecutionId())
+                && java.util.Objects.equals(first.getFireInstanceId(), second.getFireInstanceId())
+                && java.util.Objects.equals(first.getSchedulerInstanceId(), second.getSchedulerInstanceId())
+                && java.util.Objects.equals(first.getDefinitionVersion(), second.getDefinitionVersion())
+                && first.getAttempt() == second.getAttempt();
+    }
+
+    private void assertSameCompletion(TaskExecutionLog stored, TaskExecutionLog desired) {
+        if (!sameIdentity(stored, desired) || stored.getExecState() != desired.getExecState()
+                || stored.isFinalAttempt() != desired.isFinalAttempt()
+                || !java.util.Objects.equals(stored.getExecutionTimeMs(), desired.getExecutionTimeMs())
+                || !java.util.Objects.equals(stored.getErrorMessage(), desired.getErrorMessage())
+                || !java.util.Objects.equals(stored.getStackTrace(), desired.getStackTrace())) {
+            throw new IllegalStateException("Audit terminal result conflict: " + desired.getId());
+        }
     }
 
     @Override

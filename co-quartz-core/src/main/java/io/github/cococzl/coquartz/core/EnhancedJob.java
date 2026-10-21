@@ -325,11 +325,14 @@ public class EnhancedJob implements InterruptableJob {
 
     private TaskExecutionLog startReliableAudit(JobExecutionContext context, String executionId, int attempt,
                                                 LocalDateTime startTime) throws JobExecutionException {
-        if (reliableAuditService == null || properties == null || !properties.getLog().isReliableAudit()) return null;
+        if (properties == null || !properties.getLog().isReliableAudit()) return null;
+        if (reliableAuditService == null) throw new JobExecutionException("ReliableAuditService is unavailable");
         TaskExecutionLog started = new TaskExecutionLog();
         started.setId(java.util.UUID.randomUUID().toString());
         started.setJobKey(context.getJobDetail().getKey().toString());
-        started.setTriggerKey(context.getTrigger().getKey().toString());
+        String origin = context.getMergedJobDataMap() == null ? null
+                : context.getMergedJobDataMap().getString(CoQuartzConstants.ORIGIN_TRIGGER_KEY);
+        started.setTriggerKey(origin == null ? context.getTrigger().getKey().toString() : origin);
         started.setStartTime(startTime);
         started.setExecuteTime(startTime);
         started.setExecState(LogTaskExecStateEnum.STARTED);
@@ -348,7 +351,8 @@ public class EnhancedJob implements InterruptableJob {
         try {
             reliableAuditService.recordCompleted(log);
         } catch (Exception e) {
-            throw new JobExecutionException("Failed to complete reliable audit record", e);
+            throw new JobExecutionException("Failed to complete reliable audit record; business result="
+                    + log.getExecState() + ", executionId=" + log.getExecutionId() + ", attempt=" + log.getAttempt(), e);
         }
     }
 

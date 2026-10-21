@@ -61,3 +61,9 @@ unschedule 优先且不安排重试；增强任务 refireImmediately 归一到�
 统一构造器自动装配、字段装配、三层数据绑定、initializeBean，保留 BPP 生成的代理；每次执行独立实例，ManagedJob 幂等销毁目标，开始审计失败也释放实例。真实 Spring Context 验证 setter 在 PostConstruct 前生效、代理拦截执行、两次实例隔离、PreDestroy 各执行一次。原来只验证 mock autowireBean 调用的测试改为实例隔离行为断言。
 
 边界：自定义 JobFactory/自定义 Scheduler 必须主动采用本工厂；自动检测任意第三方 Scheduler 实际安装的 JobFactory 无公共 Quartz 查询 API，尚未实现通用启动校验；QuartzJobBean 与事务代理组合需后续集成补测。不声称仅凭装配调用保证所有第三方代理语义。
+
+## R09
+
+确认成立。H2 缺失/冲突/身份不符回归修复前失败；缺少 ReliableAuditService 的启动回归在 log.enabled=true 下确认修复前启动成功而失败。修复后 `mvn -q -pl co-quartz-jdbc -am -Dtest=JdbcTaskLogRepositoryTest,JdbcReliableAuditServiceTest,EnhancedJobTest,NativeAuditExecutionTest,CoQuartzAutoConfigurationTest -Dsurefire.failIfNoSpecifiedTests=false test`：40 通过。
+
+完成先核对执行身份，STARTED 条件更新同时限定 executionId/fireInstanceId/jobKey/attempt；更新零行重新读取，仅同身份、同状态/结果/耗时/终态标记才接受幂等，否则明确报 missing/identity/conflict。未吞数据库异常。可靠审计缺少服务在启动时失败，直接构造增强层也不再静默退化。完成失败异常保留业务结果、executionId、attempt，不重跑已成功业务。修复 retry STARTED 与完成日志都复用原始 Trigger 身份。
