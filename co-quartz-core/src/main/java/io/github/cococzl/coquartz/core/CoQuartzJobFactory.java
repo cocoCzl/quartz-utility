@@ -91,9 +91,10 @@ public class CoQuartzJobFactory extends SpringBeanJobFactory {
         ReliableAuditService reliableAuditService = reliableAuditServiceProvider != null
                 ? reliableAuditServiceProvider.getIfAvailable() : null;
 
-        if (isEnhancedJob(jobDataMap) && timeoutExecutor != null) {
+        boolean enhanced = isEnhancedJob(jobDataMap);
+        if (enhanced || (properties != null && properties.getLog().isReliableAudit())) {
             log.debug("Wrapping job {} with EnhancedJob", bundle.getJobDetail().getKey());
-            return new EnhancedJob((Job) job, jobDataMap, logWriter, timeoutExecutor, alertEventPublisher,
+            return new EnhancedJob((Job) job, enhanced ? jobDataMap : new JobDataMap(), logWriter, timeoutExecutor, alertEventPublisher,
                     properties, metrics, logSanitizer, reliableAuditService);
         }
 

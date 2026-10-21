@@ -109,26 +109,7 @@ public class CoQuartzJobListener implements JobListener {
 
     @Override
     public void jobToBeExecuted(JobExecutionContext context) {
-        ReliableAuditService auditService = reliableAudit();
-        if (isEnhancedJob(context) || auditService == null || !properties.getLog().isReliableAudit()) return;
-        LocalDateTime start = LocalDateTime.now();
-        TaskExecutionLog log = new TaskExecutionLog();
-        log.setId(UUID.randomUUID().toString());
-        log.setJobKey(context.getJobDetail().getKey().toString());
-        log.setTriggerKey(context.getTrigger().getKey().toString());
-        log.setExecutionId(UUID.randomUUID().toString());
-        log.setFireInstanceId(context.getFireInstanceId());
-        log.setStartTime(start);
-        log.setExecuteTime(start);
-        log.setAttempt(1);
-        log.setFinalAttempt(false);
-        log.setExecState(LogTaskExecStateEnum.STARTED);
-        try {
-            auditService.recordStarted(log);
-            context.put(CoQuartzConstants.RELIABLE_AUDIT_CONTEXT, log);
-        } catch (Exception e) {
-            throw new IllegalStateException("Failed to create reliable audit record before execution", e);
-        }
+        // Reliable audit is part of the controlled execution decorator, never a listener veto.
     }
 
     @Override
@@ -137,6 +118,14 @@ public class CoQuartzJobListener implements JobListener {
 
     @Override
     public void jobWasExecuted(JobExecutionContext context, JobExecutionException jobException) {
+        try {
+            observeCompletion(context, jobException);
+        } catch (Exception error) {
+            log.error("Task observation failed: {}", sanitize(error.getMessage(), 500));
+        }
+    }
+
+    private void observeCompletion(JobExecutionContext context, JobExecutionException jobException) {
         if (isEnhancedJob(context)) {
             return;
         }
@@ -201,28 +190,18 @@ public class CoQuartzJobListener implements JobListener {
         taskLog.setFinalAttempt(true);
         taskLog.setExecuteTime(startTime);
 
-        TaskExecutionLog auditLog = (TaskExecutionLog) context.get(CoQuartzConstants.RELIABLE_AUDIT_CONTEXT);
-        if (auditLog != null) {
-            taskLog.setId(auditLog.getId());
-            try {
-                ReliableAuditService auditService = reliableAudit();
-                if (auditService == null) throw new IllegalStateException("Reliable audit service is unavailable");
-                auditService.recordCompleted(taskLog);
-            } catch (Exception e) {
-                throw new IllegalStateException("Failed to complete reliable audit record", e);
-            }
-        } else {
-            try {
-                TaskExecutionLogWriter writer = logWriter();
-                if (writer != null) writer.write(taskLog);
-            } catch (Exception e) {
-                log.error("Failed to log task execution for job: {}", jobKey, e);
-            }
+        try {
+            TaskExecutionLogWriter writer = logWriter();
+            if (writer != null) writer.write(taskLog);
+        } catch (Exception e) {
+            log.error("Failed to log task execution for job: {}", jobKey, e);
         }
     }
 
     private boolean isEnhancedJob(JobExecutionContext context) {
-        return context.getJobDetail().getJobDataMap().containsKey(CoQuartzConstants.ENHANCED);
+        return context.getJobInstance() instanceof io.github.cococzl.coquartz.core.EnhancedJob
+                || Boolean.parseBoolean(String.valueOf(context.getJobDetail().getJobDataMap()
+                        .get(CoQuartzConstants.ENHANCED)));
     }
 
     private String sanitize(String value, int maxLength) {
