@@ -70,8 +70,8 @@ class NativeAuditExecutionTest {
     }
 
     @ParameterizedTest
-    @ValueSource(booleans = {true, false})
-    void auditFailuresAreJobFailuresAndNeverBreakQuartzCleanup(boolean failStart) throws Exception {
+    @org.junit.jupiter.params.provider.CsvSource({"true,false", "false,false", "true,true", "false,true"})
+    void auditFailuresAreJobFailuresAndNeverBreakQuartzCleanup(boolean failStart, boolean enhanced) throws Exception {
         var properties = new CoQuartzProperties();
         properties.getLog().setReliableAudit(true);
         var audit = mock(ReliableAuditService.class);
@@ -79,9 +79,13 @@ class NativeAuditExecutionTest {
         else doThrow(new IllegalStateException("database unavailable")).when(audit).recordCompleted(any());
         var beans = new StaticListableBeanFactory();
         beans.addBean("audit", audit);
+        var registry = new io.micrometer.core.instrument.simple.SimpleMeterRegistry();
+        var metrics = new io.github.cococzl.coquartz.metrics.CoQuartzMetrics(registry);
+        beans.addBean("metrics", metrics);
         var factory = new CoQuartzJobFactory();
         factory.setProperties(properties);
         factory.setReliableAuditServiceProvider(beans.getBeanProvider(ReliableAuditService.class));
+        factory.setMetricsProvider(beans.getBeanProvider(io.github.cococzl.coquartz.metrics.CoQuartzMetrics.class));
         Properties config = new Properties();
         config.setProperty("org.quartz.scheduler.instanceName", "native-audit-" + System.nanoTime());
         config.setProperty("org.quartz.threadPool.threadCount", "1");
@@ -92,7 +96,7 @@ class NativeAuditExecutionTest {
             NativeJob.executions.set(0);
             scheduler.setJobFactory(factory);
             scheduler.getListenerManager().addJobListener(new CoQuartzJobListener(
-                    (TaskExecutionLogWriter) null, null, null, properties, null, audit));
+                    (TaskExecutionLogWriter) null, metrics, null, properties, null, audit));
             scheduler.getListenerManager().addJobListener(new JobListenerSupport() {
                 public String getName() { return "completion"; }
                 public void jobWasExecuted(JobExecutionContext context, JobExecutionException error) {
@@ -100,7 +104,8 @@ class NativeAuditExecutionTest {
                     completed.countDown();
                 }
             });
-            JobDetail job = JobBuilder.newJob(NativeJob.class).withIdentity("native").build();
+            JobDetail job = JobBuilder.newJob(NativeJob.class).withIdentity("native")
+                    .usingJobData(CoQuartzConstants.ENHANCED, enhanced).build();
             Trigger trigger = TriggerBuilder.newTrigger().withIdentity("nativeTrigger").forJob(job)
                     .withSchedule(SimpleScheduleBuilder.repeatSecondlyForever(60)).build();
             scheduler.scheduleJob(job, trigger);
@@ -112,6 +117,10 @@ class NativeAuditExecutionTest {
             while (scheduler.getTriggerState(trigger.getKey()) == Trigger.TriggerState.BLOCKED
                     && System.nanoTime() < deadline) Thread.sleep(10);
             assertThat(scheduler.getTriggerState(trigger.getKey())).isEqualTo(Trigger.TriggerState.NORMAL);
-        } finally { scheduler.shutdown(true); }
+            assertThat(registry.get("co_quartz_job_active").gauge().value()).isZero();
+            assertThat(registry.find("co_quartz_job_executions_total").tag("state", "success").counter()).isNull();
+            assertThat(registry.find("co_quartz_job_executions_total").tag("job", "DEFAULT.native")
+                    .tag("state", "fail").counter()).isNotNull().satisfies(counter -> assertThat(counter.count()).isEqualTo(1));
+        } finally { scheduler.shutdown(true); metrics.close(); registry.close(); }
     }
 }

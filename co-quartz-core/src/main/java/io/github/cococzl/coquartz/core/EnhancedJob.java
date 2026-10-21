@@ -152,7 +152,12 @@ public class EnhancedJob implements InterruptableJob {
                 int attempt = scheduledAttempt;
 
                 LocalDateTime startTime = LocalDateTime.now(java.time.ZoneOffset.UTC);
-                TaskExecutionLog auditLog = startReliableAudit(context, executionId, attempt, startTime);
+                TaskExecutionLog auditLog;
+                try { auditLog = startReliableAudit(context, executionId, attempt, startTime); }
+                catch (JobExecutionException auditFailure) {
+                    if (metrics != null) metrics.recordFailure(jobKey, 0);
+                    throw auditFailure;
+                }
                 long startMs = System.nanoTime();
                 LogTaskExecStateEnum execState;
                 String errorMessage = null;
@@ -219,7 +224,14 @@ public class EnhancedJob implements InterruptableJob {
                 if (alertEventPublisher != null) alertEventPublisher.setExecutionCorrelation(taskLog);
                 if (auditLog != null) {
                     taskLog.setId(auditLog.getId());
-                    completeReliableAudit(taskLog);
+                    try { completeReliableAudit(taskLog); }
+                    catch (JobExecutionException auditFailure) {
+                        if (metrics != null) {
+                            metrics.recordFailure(jobKey, executionTimeMs);
+                            if (timedOut) metrics.recordTimeout(jobKey);
+                        }
+                        throw auditFailure;
+                    }
                 }
 
                 if (auditLog == null) {
