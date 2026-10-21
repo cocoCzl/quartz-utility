@@ -371,11 +371,15 @@ CI 提供 MySQL 8.4 服务并强制检查集群用例未跳过；profile 另以 
 
 已取消仅凭超龄 STARTED 自动判定中断的启动恢复。请通过 `recoverConfirmedStopped(cutoff, AuditRecoveryScope)` 显式提供应用、Scheduler、已确认停机的 instanceId 集合和运维证据编号；该工具可由运维重复/周期调用，原子 STARTED 条件更新允许多个恢复者竞争。AUTO instanceId 变化须使用旧节点身份及真实停机证据；远端、归属不明、其他应用记录不自动恢复。时间阈值只筛选候选记录，不是死亡证据。
 
-异步日志采用单消费者、容量或时间触发的 JDBC batch；批次事务失败后回滚，再隔离逐行失败，同身份同结果的重复 ID 可幂等接受。关闭先停止接收，最多等待 shutdown-flush-timeout-ms；超时后 queued 与 in-flight 均计入 unflushed，驱动忽略取消时后台写入仍可能继续。状态快照增加 accepted/persisted/in-flight，拒收和重排队失败计入 dropped，失败重试有上限且无额外无界 ID 缓存。默认日志 JdbcTemplate SQL 超时为 5 秒；连接获取/socket 超时仍需配置 DataSource/驱动。
+异步日志采用单消费者、容量或时间触发的 JDBC batch；批次事务失败后回滚，再隔离逐行失败，同身份同结果的重复 ID 可幂等接受，时间按实际数据库列精度比较，origin 变化视为冲突。关闭先停止接收，最多等待 shutdown-flush-timeout-ms；超时后 queued 与 in-flight 均计入 unflushed，驱动忽略取消时后台写入仍可能继续。unflushed 是关闭返回时快照，不随晚到写入回改；当前 queued/in-flight/persisted 可继续变化。状态快照增加 accepted/persisted/in-flight，accepted 不含拒收，dropped 包含拒收和已接受但重排队失败，writeFailure 统计尝试次数，不能直接相加作严格守恒等式。失败重试有上限且无额外无界 ID 缓存。手工 flushLogsImmediately 同步等待驱动，不承诺关闭时限；旧手工同步事件发布路径还可能受监听器阻塞，自动配置使用异步告警。默认日志 JdbcTemplate SQL 超时为 5 秒；连接获取/socket 超时仍需配置 DataSource/驱动。
 
 生产告警执行器使用单线程和容量 256 的有界队列，满时拒绝并增加 `AlertEventPublisher.getDroppedCount()`；不会通过 CallerRunsPolicy 阻塞任务。相同 job/type 的普通失败、日志管道和审计失败事件在 1 秒内合并，可查询 getCoalescedCount()。连续失败状态限 1024 任务、1 小时 TTL，成功清除；仅是本节点窗口，容量淘汰可能重新开始计数。自动配置下审计失败事件也走这个异步通道，存储主异常不受监听器异常影响。手工构造 publisher 且不提供 executor 的旧构造器保持同步兼容。
 
-定义协调仅支持启动或 Scheduler standby 阶段；共享 JDBC 集群更新必须停止/standby 所有节点并采用单写者部署，当前不支持混合版本节点同时协调定义，也不把内容 fingerprint 当发布顺序。暂停后换计划同样要求集群协调停机，单节点 pause-restore 标记不能代替分布式原子更新。定义指纹包含方法 beanName/methodName。
+定义协调仅支持启动或 Scheduler standby 阶段，并拒绝本节点仍有执行任务时改写/退休定义。standby 和当前执行列表都是节点本地状态；standby 不会终止在执行的业务，新增检查只是点时快照，不是原子发布屏障。共享 JDBC 更新必须由部署系统停止/standby 所有节点、确认业务及在途分派排空、阻止并发 start，并保证单写者；推荐所有旧节点完成 shutdown(true)，再由尚未启动的新 Scheduler 发布。超时未确认终止不能算排空，应等待实际退出或中止部署。库中没有全节点协调、发布锁或 fencing。
+
+旧版本节点若重新启动，仍可能把新定义覆盖回旧定义或重建已退休任务：同 owner/namespace/兼容元数据下，内容 fingerprint 没有发布先后顺序，系统不会识别这种回退。必须由部署流程阻止旧版本自动重启/扩容；不能将同版本测试收敛当成混合版本滚动发布支持。暂停后换计划同样要求集群协调停机，单节点 pause-restore 标记不能代替分布式原子更新。定义指纹包含方法 beanName/methodName。完整验收与未验证边界见 [R01–R20 验收](docs/review-acceptance.md)。
+
+Builder 默认 Trigger group 现跟随 Job group。升级旧版非默认 Job group 的任务时，若仍有属于本任务的同名 DEFAULT Trigger，隐式迁组会被拒绝；显式 triggerGroup("DEFAULT") 可保留原身份更新，或在排空/standby/单写者条件下显式迁移，避免遗留两个计划。
 
 方法删除/重命名不会自动删除未扫描到的任务。使用显式 `DefinitionMigrationPlan(namespace, retiredJobKeys)`：先 preview 检查所有权，再在所有节点停止/standby、单执行者条件下 apply。仅匹配 namespace 且 code-owned 的任务可移除；legacy 无 namespace 需先同版本协调补元数据。可将旧任务保留为 enabled=false 的 tombstone 完成迁移。
 

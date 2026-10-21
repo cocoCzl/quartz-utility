@@ -1,0 +1,1063 @@
+{
+  "review_baseline": "be91643c6b99bb4f71d574cf604c4318dcd3a632",
+  "original_java21_boot_3_3_7": {
+    "scope": "historical clean verify at 036f95f",
+    "totals": {
+      "tests": 270,
+      "passed": 270,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    },
+    "suites": [
+      {
+        "module": "co-quartz-core",
+        "runner": "surefire-reports",
+        "class": "io.github.cococzl.coquartz.config.CoQuartzAutoConfigurationTest",
+        "counts": {
+          "tests": 4,
+          "failures": 0,
+          "errors": 0,
+          "skipped": 0,
+          "passed": 4
+        },
+        "java": "21.0.9",
+        "source_xml": "/tmp/quartz-acceptance-original-reports/co-quartz-core/surefire-reports/TEST-io.github.cococzl.coquartz.config.CoQuartzAutoConfigurationTest.xml",
+        "sha256": "ea4e283b0eb18708427502b3ddee5d4d8d3477cf45afa70e90098ac853feffa1"
+      },
+      {
+        "module": "co-quartz-core",
+        "runner": "surefire-reports",
+        "class": "io.github.cococzl.coquartz.config.CoQuartzPropertiesTest",
+        "counts": {
+          "tests": 9,
+          "failures": 0,
+          "errors": 0,
+          "skipped": 0,
+          "passed": 9
+        },
+        "java": "21.0.9",
+        "source_xml": "/tmp/quartz-acceptance-original-reports/co-quartz-core/surefire-reports/TEST-io.github.cococzl.coquartz.config.CoQuartzPropertiesTest.xml",
+        "sha256": "06ca702f2e04447b808abc5887ede4952c6c3913b8a36f8b2bd8dced1d912741"
+      },
+      {
+        "module": "co-quartz-core",
+        "runner": "surefire-reports",
+        "class": "io.github.cococzl.coquartz.core.BuilderScheduleRegressionTest",
+        "counts": {
+          "tests": 5,
+          "failures": 0,
+          "errors": 0,
+          "skipped": 0,
+          "passed": 5
+        },
+        "java": "21.0.9",
+        "source_xml": "/tmp/quartz-acceptance-original-reports/co-quartz-core/surefire-reports/TEST-io.github.cococzl.coquartz.core.BuilderScheduleRegressionTest.xml",
+        "sha256": "38c7ea7fd4c29f1c021a81bfe7448ae37ea57403df89ba5844d4455a56bccd8e"
+      },
+      {
+        "module": "co-quartz-core",
+        "runner": "surefire-reports",
+        "class": "io.github.cococzl.coquartz.core.CoQuartzJobFactoryTest",
+        "counts": {
+          "tests": 10,
+          "failures": 0,
+          "errors": 0,
+          "skipped": 0,
+          "passed": 10
+        },
+        "java": "21.0.9",
+        "source_xml": "/tmp/quartz-acceptance-original-reports/co-quartz-core/surefire-reports/TEST-io.github.cococzl.coquartz.core.CoQuartzJobFactoryTest.xml",
+        "sha256": "ebe567b7445d56af20c3b6016c51e9564c26a760294fc7ec78e1090c403a3ccf"
+      },
+      {
+        "module": "co-quartz-core",
+        "runner": "surefire-reports",
+        "class": "io.github.cococzl.coquartz.core.CoQuartzTimeoutExecutorTest",
+        "counts": {
+          "tests": 1,
+          "failures": 0,
+          "errors": 0,
+          "skipped": 0,
+          "passed": 1
+        },
+        "java": "21.0.9",
+        "source_xml": "/tmp/quartz-acceptance-original-reports/co-quartz-core/surefire-reports/TEST-io.github.cococzl.coquartz.core.CoQuartzTimeoutExecutorTest.xml",
+        "sha256": "1b611e34da29339dd074d5fb61b725941968b049fcb11f5a631e6b1c5d83e759"
+      },
+      {
+        "module": "co-quartz-core",
+        "runner": "surefire-reports",
+        "class": "io.github.cococzl.coquartz.core.CoQuartzUtilsTest",
+        "counts": {
+          "tests": 8,
+          "failures": 0,
+          "errors": 0,
+          "skipped": 0,
+          "passed": 8
+        },
+        "java": "21.0.9",
+        "source_xml": "/tmp/quartz-acceptance-original-reports/co-quartz-core/surefire-reports/TEST-io.github.cococzl.coquartz.core.CoQuartzUtilsTest.xml",
+        "sha256": "7f15fbfd0ad4b0d2c0e555258cdcd93a3353835880d788bf170691fa6378cfba"
+      },
+      {
+        "module": "co-quartz-core",
+        "runner": "surefire-reports",
+        "class": "io.github.cococzl.coquartz.core.EnhancedJobTest",
+        "counts": {
+          "tests": 21,
+          "failures": 0,
+          "errors": 0,
+          "skipped": 0,
+          "passed": 21
+        },
+        "java": "21.0.9",
+        "source_xml": "/tmp/quartz-acceptance-original-reports/co-quartz-core/surefire-reports/TEST-io.github.cococzl.coquartz.core.EnhancedJobTest.xml",
+        "sha256": "04a773ae6a96e7504412dc70ded75ea8cd4c6b95eeeea323d5b92d7b3de657b4"
+      },
+      {
+        "module": "co-quartz-core",
+        "runner": "surefire-reports",
+        "class": "io.github.cococzl.coquartz.core.JobSpringLifecycleTest",
+        "counts": {
+          "tests": 4,
+          "failures": 0,
+          "errors": 0,
+          "skipped": 0,
+          "passed": 4
+        },
+        "java": "21.0.9",
+        "source_xml": "/tmp/quartz-acceptance-original-reports/co-quartz-core/surefire-reports/TEST-io.github.cococzl.coquartz.core.JobSpringLifecycleTest.xml",
+        "sha256": "729c509ebc29a7a9dc8ac5dc5cfe02900e788bd2fd6e973a7299e38dd49867d6"
+      },
+      {
+        "module": "co-quartz-core",
+        "runner": "surefire-reports",
+        "class": "io.github.cococzl.coquartz.core.NativeAuditExecutionTest",
+        "counts": {
+          "tests": 3,
+          "failures": 0,
+          "errors": 0,
+          "skipped": 0,
+          "passed": 3
+        },
+        "java": "21.0.9",
+        "source_xml": "/tmp/quartz-acceptance-original-reports/co-quartz-core/surefire-reports/TEST-io.github.cococzl.coquartz.core.NativeAuditExecutionTest.xml",
+        "sha256": "e2aee7e132f2afe03eb5bd7217307091e477547f839bf90cdec0dc157f59cc3b"
+      },
+      {
+        "module": "co-quartz-core",
+        "runner": "surefire-reports",
+        "class": "io.github.cococzl.coquartz.core.NonConcurrentJobWrapperTest",
+        "counts": {
+          "tests": 2,
+          "failures": 0,
+          "errors": 0,
+          "skipped": 0,
+          "passed": 2
+        },
+        "java": "21.0.9",
+        "source_xml": "/tmp/quartz-acceptance-original-reports/co-quartz-core/surefire-reports/TEST-io.github.cococzl.coquartz.core.NonConcurrentJobWrapperTest.xml",
+        "sha256": "a3d3c13b1385b8d918e9e225e49e62c51e11d2078845e80e3d45696cd039609a"
+      },
+      {
+        "module": "co-quartz-core",
+        "runner": "surefire-reports",
+        "class": "io.github.cococzl.coquartz.core.QuartzConcurrencyTest",
+        "counts": {
+          "tests": 3,
+          "failures": 0,
+          "errors": 0,
+          "skipped": 0,
+          "passed": 3
+        },
+        "java": "21.0.9",
+        "source_xml": "/tmp/quartz-acceptance-original-reports/co-quartz-core/surefire-reports/TEST-io.github.cococzl.coquartz.core.QuartzConcurrencyTest.xml",
+        "sha256": "48bc6b5a7b7d322e80ff6af935b2e645a41fccbf34bd7f2ba480c2b501c966f0"
+      },
+      {
+        "module": "co-quartz-core",
+        "runner": "surefire-reports",
+        "class": "io.github.cococzl.coquartz.core.QuartzJdbcClusterReconciliationIT",
+        "counts": {
+          "tests": 6,
+          "failures": 0,
+          "errors": 0,
+          "skipped": 0,
+          "passed": 6
+        },
+        "java": "21.0.9",
+        "source_xml": "/tmp/quartz-acceptance-original-reports/co-quartz-core/surefire-reports/TEST-io.github.cococzl.coquartz.core.QuartzJdbcClusterReconciliationIT.xml",
+        "sha256": "81e3b8bc40c6105bf842a5deb155d65a3c9049638b6ed760b27927471fe27dfd"
+      },
+      {
+        "module": "co-quartz-core",
+        "runner": "surefire-reports",
+        "class": "io.github.cococzl.coquartz.core.QuartzJdbcRetryPersistenceTest",
+        "counts": {
+          "tests": 3,
+          "failures": 0,
+          "errors": 0,
+          "skipped": 0,
+          "passed": 3
+        },
+        "java": "21.0.9",
+        "source_xml": "/tmp/quartz-acceptance-original-reports/co-quartz-core/surefire-reports/TEST-io.github.cococzl.coquartz.core.QuartzJdbcRetryPersistenceTest.xml",
+        "sha256": "2fb318f85b0ae5cf2172ae3c595d9812f9f3508e84645f03e430295cba746abb"
+      },
+      {
+        "module": "co-quartz-core",
+        "runner": "surefire-reports",
+        "class": "io.github.cococzl.coquartz.core.QuartzJobAnnotationProcessorTest",
+        "counts": {
+          "tests": 15,
+          "failures": 0,
+          "errors": 0,
+          "skipped": 0,
+          "passed": 15
+        },
+        "java": "21.0.9",
+        "source_xml": "/tmp/quartz-acceptance-original-reports/co-quartz-core/surefire-reports/TEST-io.github.cococzl.coquartz.core.QuartzJobAnnotationProcessorTest.xml",
+        "sha256": "3d2b6513fc56b9e8394a62a42662d518b3c9abf6bc1973899b740877690d7db2"
+      },
+      {
+        "module": "co-quartz-core",
+        "runner": "surefire-reports",
+        "class": "io.github.cococzl.coquartz.core.QuartzJobReconciliationTest",
+        "counts": {
+          "tests": 17,
+          "failures": 0,
+          "errors": 0,
+          "skipped": 0,
+          "passed": 17
+        },
+        "java": "21.0.9",
+        "source_xml": "/tmp/quartz-acceptance-original-reports/co-quartz-core/surefire-reports/TEST-io.github.cococzl.coquartz.core.QuartzJobReconciliationTest.xml",
+        "sha256": "0ba8149ed32b342d46e1bf9ded9099de2d17da787f056a14dd7bc765681f1bac"
+      },
+      {
+        "module": "co-quartz-core",
+        "runner": "surefire-reports",
+        "class": "io.github.cococzl.coquartz.core.QuartzNativeCapabilitiesTest",
+        "counts": {
+          "tests": 2,
+          "failures": 0,
+          "errors": 0,
+          "skipped": 0,
+          "passed": 2
+        },
+        "java": "21.0.9",
+        "source_xml": "/tmp/quartz-acceptance-original-reports/co-quartz-core/surefire-reports/TEST-io.github.cococzl.coquartz.core.QuartzNativeCapabilitiesTest.xml",
+        "sha256": "f4faa5a0d7de09b0906067b31d91b500fa69aec946c4502154b34c0a13d260c4"
+      },
+      {
+        "module": "co-quartz-core",
+        "runner": "surefire-reports",
+        "class": "io.github.cococzl.coquartz.core.QuartzTaskBuilderTest",
+        "counts": {
+          "tests": 18,
+          "failures": 0,
+          "errors": 0,
+          "skipped": 0,
+          "passed": 18
+        },
+        "java": "21.0.9",
+        "source_xml": "/tmp/quartz-acceptance-original-reports/co-quartz-core/surefire-reports/TEST-io.github.cococzl.coquartz.core.QuartzTaskBuilderTest.xml",
+        "sha256": "7356ae8025bea5698e66ea5b90e4b2fc6d08a4eef322ce54a2f743dea5654a29"
+      },
+      {
+        "module": "co-quartz-core",
+        "runner": "surefire-reports",
+        "class": "io.github.cococzl.coquartz.core.QuartzTriggerFactoryTest",
+        "counts": {
+          "tests": 8,
+          "failures": 0,
+          "errors": 0,
+          "skipped": 0,
+          "passed": 8
+        },
+        "java": "21.0.9",
+        "source_xml": "/tmp/quartz-acceptance-original-reports/co-quartz-core/surefire-reports/TEST-io.github.cococzl.coquartz.core.QuartzTriggerFactoryTest.xml",
+        "sha256": "10a5711d63af73a59185d7d0b151660de4af53b871fb2f317debfd0b07f070c9"
+      },
+      {
+        "module": "co-quartz-core",
+        "runner": "surefire-reports",
+        "class": "io.github.cococzl.coquartz.core.RetryContextTest",
+        "counts": {
+          "tests": 9,
+          "failures": 0,
+          "errors": 0,
+          "skipped": 0,
+          "passed": 9
+        },
+        "java": "21.0.9",
+        "source_xml": "/tmp/quartz-acceptance-original-reports/co-quartz-core/surefire-reports/TEST-io.github.cococzl.coquartz.core.RetryContextTest.xml",
+        "sha256": "a2af3c6f98d0ea59e93a2b92ef4f8c34b427eb1369690350f7d54d31c4ed075f"
+      },
+      {
+        "module": "co-quartz-core",
+        "runner": "surefire-reports",
+        "class": "io.github.cococzl.coquartz.core.TaskPolicyValidationTest",
+        "counts": {
+          "tests": 1,
+          "failures": 0,
+          "errors": 0,
+          "skipped": 0,
+          "passed": 1
+        },
+        "java": "21.0.9",
+        "source_xml": "/tmp/quartz-acceptance-original-reports/co-quartz-core/surefire-reports/TEST-io.github.cococzl.coquartz.core.TaskPolicyValidationTest.xml",
+        "sha256": "14eedac130369d7052e04795e8a565f3437c6fc46014669b1b8d676dc8c9c693"
+      },
+      {
+        "module": "co-quartz-core",
+        "runner": "surefire-reports",
+        "class": "io.github.cococzl.coquartz.dto.TaskExecutionLogTest",
+        "counts": {
+          "tests": 4,
+          "failures": 0,
+          "errors": 0,
+          "skipped": 0,
+          "passed": 4
+        },
+        "java": "21.0.9",
+        "source_xml": "/tmp/quartz-acceptance-original-reports/co-quartz-core/surefire-reports/TEST-io.github.cococzl.coquartz.dto.TaskExecutionLogTest.xml",
+        "sha256": "3c03dd7d80f2d4bafc0793514dc9ef4b02e1463623bcb70e2954f83b5c3ca014"
+      },
+      {
+        "module": "co-quartz-core",
+        "runner": "surefire-reports",
+        "class": "io.github.cococzl.coquartz.enums.LogTaskExecStateEnumTest",
+        "counts": {
+          "tests": 8,
+          "failures": 0,
+          "errors": 0,
+          "skipped": 0,
+          "passed": 8
+        },
+        "java": "21.0.9",
+        "source_xml": "/tmp/quartz-acceptance-original-reports/co-quartz-core/surefire-reports/TEST-io.github.cococzl.coquartz.enums.LogTaskExecStateEnumTest.xml",
+        "sha256": "f0bc3dae26efbe5343196311060ffbf8f62d198a41ffd303b797942467e88bcb"
+      },
+      {
+        "module": "co-quartz-core",
+        "runner": "surefire-reports",
+        "class": "io.github.cococzl.coquartz.enums.MisfirePolicyTest",
+        "counts": {
+          "tests": 2,
+          "failures": 0,
+          "errors": 0,
+          "skipped": 0,
+          "passed": 2
+        },
+        "java": "21.0.9",
+        "source_xml": "/tmp/quartz-acceptance-original-reports/co-quartz-core/surefire-reports/TEST-io.github.cococzl.coquartz.enums.MisfirePolicyTest.xml",
+        "sha256": "0775be0c8a1e2847b38e5ef5a4490da4897b709e17f58cec9d21b584e6ed280c"
+      },
+      {
+        "module": "co-quartz-core",
+        "runner": "surefire-reports",
+        "class": "io.github.cococzl.coquartz.event.AlertEventPublisherAsyncTest",
+        "counts": {
+          "tests": 4,
+          "failures": 0,
+          "errors": 0,
+          "skipped": 0,
+          "passed": 4
+        },
+        "java": "21.0.9",
+        "source_xml": "/tmp/quartz-acceptance-original-reports/co-quartz-core/surefire-reports/TEST-io.github.cococzl.coquartz.event.AlertEventPublisherAsyncTest.xml",
+        "sha256": "32c5dd89557fd94b01162d91ac8a62de283ce9c160f8863595915c07ee71dfe7"
+      },
+      {
+        "module": "co-quartz-core",
+        "runner": "surefire-reports",
+        "class": "io.github.cococzl.coquartz.event.AlertEventPublisherTest",
+        "counts": {
+          "tests": 8,
+          "failures": 0,
+          "errors": 0,
+          "skipped": 0,
+          "passed": 8
+        },
+        "java": "21.0.9",
+        "source_xml": "/tmp/quartz-acceptance-original-reports/co-quartz-core/surefire-reports/TEST-io.github.cococzl.coquartz.event.AlertEventPublisherTest.xml",
+        "sha256": "3afe5455ab4f705001bd8d2d4baca05752ff60652c85fdcc4340b643ba287dae"
+      },
+      {
+        "module": "co-quartz-core",
+        "runner": "surefire-reports",
+        "class": "io.github.cococzl.coquartz.exception.ExceptionHierarchyTest",
+        "counts": {
+          "tests": 9,
+          "failures": 0,
+          "errors": 0,
+          "skipped": 0,
+          "passed": 9
+        },
+        "java": "21.0.9",
+        "source_xml": "/tmp/quartz-acceptance-original-reports/co-quartz-core/surefire-reports/TEST-io.github.cococzl.coquartz.exception.ExceptionHierarchyTest.xml",
+        "sha256": "cc39e3a7f1e369016c5e7e18ec1fdae1cab12b9db290c8ce731ad36c82d556a4"
+      },
+      {
+        "module": "co-quartz-core",
+        "runner": "surefire-reports",
+        "class": "io.github.cococzl.coquartz.listener.CoQuartzJobListenerTest",
+        "counts": {
+          "tests": 6,
+          "failures": 0,
+          "errors": 0,
+          "skipped": 0,
+          "passed": 6
+        },
+        "java": "21.0.9",
+        "source_xml": "/tmp/quartz-acceptance-original-reports/co-quartz-core/surefire-reports/TEST-io.github.cococzl.coquartz.listener.CoQuartzJobListenerTest.xml",
+        "sha256": "90f94f73dbb3517c3ef9e6871777fa9301e07d6d137ece27d8997186dc883760"
+      },
+      {
+        "module": "co-quartz-core",
+        "runner": "surefire-reports",
+        "class": "io.github.cococzl.coquartz.metrics.CoQuartzMetricsTest",
+        "counts": {
+          "tests": 3,
+          "failures": 0,
+          "errors": 0,
+          "skipped": 0,
+          "passed": 3
+        },
+        "java": "21.0.9",
+        "source_xml": "/tmp/quartz-acceptance-original-reports/co-quartz-core/surefire-reports/TEST-io.github.cococzl.coquartz.metrics.CoQuartzMetricsTest.xml",
+        "sha256": "ffe09a56dfa3ae38bf04ad5b044c20539f9aa7164a5a8a8845919717f1f533c8"
+      },
+      {
+        "module": "co-quartz-core",
+        "runner": "surefire-reports",
+        "class": "io.github.cococzl.coquartz.service.DefaultLogSanitizerTest",
+        "counts": {
+          "tests": 10,
+          "failures": 0,
+          "errors": 0,
+          "skipped": 0,
+          "passed": 10
+        },
+        "java": "21.0.9",
+        "source_xml": "/tmp/quartz-acceptance-original-reports/co-quartz-core/surefire-reports/TEST-io.github.cococzl.coquartz.service.DefaultLogSanitizerTest.xml",
+        "sha256": "541cf8db5aec518d6eed417b892ae956c08d0bbf28b93641a8200c732a6ea252"
+      },
+      {
+        "module": "co-quartz-core",
+        "runner": "surefire-reports",
+        "class": "io.github.cococzl.coquartz.service.TaskAdminServiceTest",
+        "counts": {
+          "tests": 3,
+          "failures": 0,
+          "errors": 0,
+          "skipped": 0,
+          "passed": 3
+        },
+        "java": "21.0.9",
+        "source_xml": "/tmp/quartz-acceptance-original-reports/co-quartz-core/surefire-reports/TEST-io.github.cococzl.coquartz.service.TaskAdminServiceTest.xml",
+        "sha256": "aada325f8fd3d06d76d10d4e7f344b3001d42fb27ea784ecc8bffd6358e4cb47"
+      },
+      {
+        "module": "co-quartz-core",
+        "runner": "surefire-reports",
+        "class": "io.github.cococzl.coquartz.service.TaskQueryServiceTest",
+        "counts": {
+          "tests": 2,
+          "failures": 0,
+          "errors": 0,
+          "skipped": 0,
+          "passed": 2
+        },
+        "java": "21.0.9",
+        "source_xml": "/tmp/quartz-acceptance-original-reports/co-quartz-core/surefire-reports/TEST-io.github.cococzl.coquartz.service.TaskQueryServiceTest.xml",
+        "sha256": "69a66bce0fcc910de4c08ec0dbdbe0f942e259faf8f7fccb26b74106bdadd760"
+      },
+      {
+        "module": "co-quartz-jdbc",
+        "runner": "failsafe-reports",
+        "class": "io.github.cococzl.coquartz.jdbc.ContainerDatabaseLogIT",
+        "counts": {
+          "tests": 2,
+          "failures": 0,
+          "errors": 0,
+          "skipped": 0,
+          "passed": 2
+        },
+        "java": "21.0.9",
+        "source_xml": "/tmp/quartz-acceptance-original-reports/co-quartz-jdbc/failsafe-reports/TEST-io.github.cococzl.coquartz.jdbc.ContainerDatabaseLogIT.xml",
+        "sha256": "1402891251d43a5c9ed6fae3d2e0e7daf425f24bf383c16fd3fb14b28403401a"
+      },
+      {
+        "module": "co-quartz-jdbc",
+        "runner": "failsafe-reports",
+        "class": "io.github.cococzl.coquartz.jdbc.RealDatabaseLogIT",
+        "counts": {
+          "tests": 2,
+          "failures": 0,
+          "errors": 0,
+          "skipped": 0,
+          "passed": 2
+        },
+        "java": "21.0.9",
+        "source_xml": "/tmp/quartz-acceptance-original-reports/co-quartz-jdbc/failsafe-reports/TEST-io.github.cococzl.coquartz.jdbc.RealDatabaseLogIT.xml",
+        "sha256": "7914d9d047e2b0ca3860fe9f4ca45e5c07806833bf1f6ec9e12bfc059c97f928"
+      },
+      {
+        "module": "co-quartz-jdbc",
+        "runner": "surefire-reports",
+        "class": "io.github.cococzl.coquartz.jdbc.NativeJdbcAuditFailureTest",
+        "counts": {
+          "tests": 2,
+          "failures": 0,
+          "errors": 0,
+          "skipped": 0,
+          "passed": 2
+        },
+        "java": "21.0.9",
+        "source_xml": "/tmp/quartz-acceptance-original-reports/co-quartz-jdbc/surefire-reports/TEST-io.github.cococzl.coquartz.jdbc.NativeJdbcAuditFailureTest.xml",
+        "sha256": "b0711a6e26358d1442aa1f8a7910ca64ea605694cf3d752f29a1e42c62eba384"
+      },
+      {
+        "module": "co-quartz-jdbc",
+        "runner": "surefire-reports",
+        "class": "io.github.cococzl.coquartz.jdbc.config.BootQuartzConfigurationMatrixTest",
+        "counts": {
+          "tests": 3,
+          "failures": 0,
+          "errors": 0,
+          "skipped": 0,
+          "passed": 3
+        },
+        "java": "21.0.9",
+        "source_xml": "/tmp/quartz-acceptance-original-reports/co-quartz-jdbc/surefire-reports/TEST-io.github.cococzl.coquartz.jdbc.config.BootQuartzConfigurationMatrixTest.xml",
+        "sha256": "2a0c4ac5fc63b336e1468b553c7da669505c606acb3d65034d470a3cd53e8244"
+      },
+      {
+        "module": "co-quartz-jdbc",
+        "runner": "surefire-reports",
+        "class": "io.github.cococzl.coquartz.jdbc.config.CoQuartzJdbcAutoConfigurationTest",
+        "counts": {
+          "tests": 3,
+          "failures": 0,
+          "errors": 0,
+          "skipped": 0,
+          "passed": 3
+        },
+        "java": "21.0.9",
+        "source_xml": "/tmp/quartz-acceptance-original-reports/co-quartz-jdbc/surefire-reports/TEST-io.github.cococzl.coquartz.jdbc.config.CoQuartzJdbcAutoConfigurationTest.xml",
+        "sha256": "386531c4d6d6941ea632938a8b9973165481bf98ec36ec79c04c046792c8deef"
+      },
+      {
+        "module": "co-quartz-jdbc",
+        "runner": "surefire-reports",
+        "class": "io.github.cococzl.coquartz.jdbc.job.LogCleanupRegistrarTest",
+        "counts": {
+          "tests": 1,
+          "failures": 0,
+          "errors": 0,
+          "skipped": 0,
+          "passed": 1
+        },
+        "java": "21.0.9",
+        "source_xml": "/tmp/quartz-acceptance-original-reports/co-quartz-jdbc/surefire-reports/TEST-io.github.cococzl.coquartz.jdbc.job.LogCleanupRegistrarTest.xml",
+        "sha256": "948497d98dbb9ab853cc868c87f104da10ca0d8a8f611ab6a556d5a3d5a09e91"
+      },
+      {
+        "module": "co-quartz-jdbc",
+        "runner": "surefire-reports",
+        "class": "io.github.cococzl.coquartz.jdbc.repository.JdbcTaskLogRepositoryTest",
+        "counts": {
+          "tests": 17,
+          "failures": 0,
+          "errors": 0,
+          "skipped": 0,
+          "passed": 17
+        },
+        "java": "21.0.9",
+        "source_xml": "/tmp/quartz-acceptance-original-reports/co-quartz-jdbc/surefire-reports/TEST-io.github.cococzl.coquartz.jdbc.repository.JdbcTaskLogRepositoryTest.xml",
+        "sha256": "1469578fd616fb1e7ac8f744ec8344ece980eb95ef9e439ccfe3f735cc14616f"
+      },
+      {
+        "module": "co-quartz-jdbc",
+        "runner": "surefire-reports",
+        "class": "io.github.cococzl.coquartz.jdbc.schema.SchemaInitializerTest",
+        "counts": {
+          "tests": 7,
+          "failures": 0,
+          "errors": 0,
+          "skipped": 0,
+          "passed": 7
+        },
+        "java": "21.0.9",
+        "source_xml": "/tmp/quartz-acceptance-original-reports/co-quartz-jdbc/surefire-reports/TEST-io.github.cococzl.coquartz.jdbc.schema.SchemaInitializerTest.xml",
+        "sha256": "a63da551a085887cde6047cc3c89a334240834cd5f4b4bce334efb1e5457b01a"
+      },
+      {
+        "module": "co-quartz-jdbc",
+        "runner": "surefire-reports",
+        "class": "io.github.cococzl.coquartz.jdbc.service.JdbcAsyncTaskLogServiceTest",
+        "counts": {
+          "tests": 10,
+          "failures": 0,
+          "errors": 0,
+          "skipped": 0,
+          "passed": 10
+        },
+        "java": "21.0.9",
+        "source_xml": "/tmp/quartz-acceptance-original-reports/co-quartz-jdbc/surefire-reports/TEST-io.github.cococzl.coquartz.jdbc.service.JdbcAsyncTaskLogServiceTest.xml",
+        "sha256": "9c5374b983b152d117259012b46fed29e678831c6affda10191d692aaef21c35"
+      },
+      {
+        "module": "co-quartz-jdbc",
+        "runner": "surefire-reports",
+        "class": "io.github.cococzl.coquartz.jdbc.service.JdbcReliableAuditServiceTest",
+        "counts": {
+          "tests": 3,
+          "failures": 0,
+          "errors": 0,
+          "skipped": 0,
+          "passed": 3
+        },
+        "java": "21.0.9",
+        "source_xml": "/tmp/quartz-acceptance-original-reports/co-quartz-jdbc/surefire-reports/TEST-io.github.cococzl.coquartz.jdbc.service.JdbcReliableAuditServiceTest.xml",
+        "sha256": "44ebb07531ac581789f2bf9cd42a264ec483130d6179b1fcd3a290e0b59ea213"
+      },
+      {
+        "module": "co-quartz-jdbc",
+        "runner": "surefire-reports",
+        "class": "io.github.cococzl.coquartz.jdbc.service.JdbcSynchronousTaskLogWriterTest",
+        "counts": {
+          "tests": 1,
+          "failures": 0,
+          "errors": 0,
+          "skipped": 0,
+          "passed": 1
+        },
+        "java": "21.0.9",
+        "source_xml": "/tmp/quartz-acceptance-original-reports/co-quartz-jdbc/surefire-reports/TEST-io.github.cococzl.coquartz.jdbc.service.JdbcSynchronousTaskLogWriterTest.xml",
+        "sha256": "e054e7e1cb301cabfccf778bab57b415fb84b2394b490c84dc8a08cef7f2295f"
+      },
+      {
+        "module": "co-quartz-starter",
+        "runner": "surefire-reports",
+        "class": "io.github.cococzl.coquartz.CoQuartzE2eTest",
+        "counts": {
+          "tests": 11,
+          "failures": 0,
+          "errors": 0,
+          "skipped": 0,
+          "passed": 11
+        },
+        "java": "21.0.9",
+        "source_xml": "/tmp/quartz-acceptance-original-reports/co-quartz-starter/surefire-reports/TEST-io.github.cococzl.coquartz.CoQuartzE2eTest.xml",
+        "sha256": "56104e260467730b770998b16495c0db422cb3ca279def019769e7548f4c6991"
+      }
+    ]
+  },
+  "targeted_java21_boot_3_3_7": {
+    "scope": "selected final suites; not a clean full matrix",
+    "totals": {
+      "tests": 148,
+      "passed": 148,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    },
+    "suites": [
+      {
+        "module": "co-quartz-core",
+        "runner": "surefire-reports",
+        "class": "io.github.cococzl.coquartz.core.BuilderScheduleRegressionTest",
+        "counts": {
+          "tests": 6,
+          "failures": 0,
+          "errors": 0,
+          "skipped": 0,
+          "passed": 6
+        },
+        "java": "21.0.9",
+        "source_xml": "/tmp/quartz-acceptance-java21-reports/co-quartz-core/surefire-reports/TEST-io.github.cococzl.coquartz.core.BuilderScheduleRegressionTest.xml",
+        "sha256": "1a3c78d1ab006e087f5853fea58519b3f7d7c470568d9c838aa1d40bf99adc45"
+      },
+      {
+        "module": "co-quartz-core",
+        "runner": "surefire-reports",
+        "class": "io.github.cococzl.coquartz.core.EnhancedJobTest",
+        "counts": {
+          "tests": 21,
+          "failures": 0,
+          "errors": 0,
+          "skipped": 0,
+          "passed": 21
+        },
+        "java": "21.0.9",
+        "source_xml": "/tmp/quartz-acceptance-java21-reports/co-quartz-core/surefire-reports/TEST-io.github.cococzl.coquartz.core.EnhancedJobTest.xml",
+        "sha256": "d03b6a4504033199c9041e0b4dadadc91e34aaed32b9e82a54f3eeb3bce437bd"
+      },
+      {
+        "module": "co-quartz-core",
+        "runner": "surefire-reports",
+        "class": "io.github.cococzl.coquartz.core.JobSpringLifecycleTest",
+        "counts": {
+          "tests": 4,
+          "failures": 0,
+          "errors": 0,
+          "skipped": 0,
+          "passed": 4
+        },
+        "java": "21.0.9",
+        "source_xml": "/tmp/quartz-acceptance-java21-reports/co-quartz-core/surefire-reports/TEST-io.github.cococzl.coquartz.core.JobSpringLifecycleTest.xml",
+        "sha256": "a261979feaf885a854df79e361d9c2bb26ffce90262b414877b13f75183e1fbc"
+      },
+      {
+        "module": "co-quartz-core",
+        "runner": "surefire-reports",
+        "class": "io.github.cococzl.coquartz.core.NativeAuditExecutionTest",
+        "counts": {
+          "tests": 8,
+          "failures": 0,
+          "errors": 0,
+          "skipped": 0,
+          "passed": 8
+        },
+        "java": "21.0.9",
+        "source_xml": "/tmp/quartz-acceptance-java21-reports/co-quartz-core/surefire-reports/TEST-io.github.cococzl.coquartz.core.NativeAuditExecutionTest.xml",
+        "sha256": "545fde7a1c3792c802f96126a0ddbefe3368b755e7cc52ae9e470e046913428c"
+      },
+      {
+        "module": "co-quartz-core",
+        "runner": "surefire-reports",
+        "class": "io.github.cococzl.coquartz.core.QuartzConcurrencyTest",
+        "counts": {
+          "tests": 5,
+          "failures": 0,
+          "errors": 0,
+          "skipped": 0,
+          "passed": 5
+        },
+        "java": "21.0.9",
+        "source_xml": "/tmp/quartz-acceptance-java21-reports/co-quartz-core/surefire-reports/TEST-io.github.cococzl.coquartz.core.QuartzConcurrencyTest.xml",
+        "sha256": "2372bf81761642a94dc4c8e5608e2058134f3b05ab6531315f8df4074696abe4"
+      },
+      {
+        "module": "co-quartz-core",
+        "runner": "surefire-reports",
+        "class": "io.github.cococzl.coquartz.core.QuartzJdbcRetryPersistenceTest",
+        "counts": {
+          "tests": 3,
+          "failures": 0,
+          "errors": 0,
+          "skipped": 0,
+          "passed": 3
+        },
+        "java": "21.0.9",
+        "source_xml": "/tmp/quartz-acceptance-java21-reports/co-quartz-core/surefire-reports/TEST-io.github.cococzl.coquartz.core.QuartzJdbcRetryPersistenceTest.xml",
+        "sha256": "49abdd8fc9d95b777ff1bf18a03b12a0741fa6586f95e2f6635d8887741a2f9c"
+      },
+      {
+        "module": "co-quartz-core",
+        "runner": "surefire-reports",
+        "class": "io.github.cococzl.coquartz.core.QuartzJobAnnotationProcessorTest",
+        "counts": {
+          "tests": 15,
+          "failures": 0,
+          "errors": 0,
+          "skipped": 0,
+          "passed": 15
+        },
+        "java": "21.0.9",
+        "source_xml": "/tmp/quartz-acceptance-java21-reports/co-quartz-core/surefire-reports/TEST-io.github.cococzl.coquartz.core.QuartzJobAnnotationProcessorTest.xml",
+        "sha256": "31853b7ca18a955c2a73c38a7ba1523fd63c7a8a8fd7f05d5e95c0c3d6699f1e"
+      },
+      {
+        "module": "co-quartz-core",
+        "runner": "surefire-reports",
+        "class": "io.github.cococzl.coquartz.core.QuartzJobReconciliationTest",
+        "counts": {
+          "tests": 19,
+          "failures": 0,
+          "errors": 0,
+          "skipped": 0,
+          "passed": 19
+        },
+        "java": "21.0.9",
+        "source_xml": "/tmp/quartz-acceptance-java21-reports/co-quartz-core/surefire-reports/TEST-io.github.cococzl.coquartz.core.QuartzJobReconciliationTest.xml",
+        "sha256": "63ce997854edad10113b7f40f3e187990f99b6a8f2019fb4a2f1a650eff94929"
+      },
+      {
+        "module": "co-quartz-core",
+        "runner": "surefire-reports",
+        "class": "io.github.cococzl.coquartz.core.QuartzTaskBuilderTest",
+        "counts": {
+          "tests": 18,
+          "failures": 0,
+          "errors": 0,
+          "skipped": 0,
+          "passed": 18
+        },
+        "java": "21.0.9",
+        "source_xml": "/tmp/quartz-acceptance-java21-reports/co-quartz-core/surefire-reports/TEST-io.github.cococzl.coquartz.core.QuartzTaskBuilderTest.xml",
+        "sha256": "bafe779fa029c1114fd156f93ea84ed373de9155dda73ac1ab2751fbf50a9549"
+      },
+      {
+        "module": "co-quartz-core",
+        "runner": "surefire-reports",
+        "class": "io.github.cococzl.coquartz.listener.CoQuartzJobListenerTest",
+        "counts": {
+          "tests": 6,
+          "failures": 0,
+          "errors": 0,
+          "skipped": 0,
+          "passed": 6
+        },
+        "java": "21.0.9",
+        "source_xml": "/tmp/quartz-acceptance-java21-reports/co-quartz-core/surefire-reports/TEST-io.github.cococzl.coquartz.listener.CoQuartzJobListenerTest.xml",
+        "sha256": "1c7e6709396f5dc8d2b85a09853d9f684e5b1e8ae45711a012278269d66c2efd"
+      },
+      {
+        "module": "co-quartz-core",
+        "runner": "surefire-reports",
+        "class": "io.github.cococzl.coquartz.metrics.CoQuartzMetricsTest",
+        "counts": {
+          "tests": 3,
+          "failures": 0,
+          "errors": 0,
+          "skipped": 0,
+          "passed": 3
+        },
+        "java": "21.0.9",
+        "source_xml": "/tmp/quartz-acceptance-java21-reports/co-quartz-core/surefire-reports/TEST-io.github.cococzl.coquartz.metrics.CoQuartzMetricsTest.xml",
+        "sha256": "f7a2ed64e7d93772906d3c31a2704ee5610ab55545ca1574a82b783bdddded01"
+      },
+      {
+        "module": "co-quartz-jdbc",
+        "runner": "failsafe-reports",
+        "class": "io.github.cococzl.coquartz.jdbc.ContainerDatabaseLogIT",
+        "counts": {
+          "tests": 2,
+          "failures": 0,
+          "errors": 0,
+          "skipped": 0,
+          "passed": 2
+        },
+        "java": "21.0.9",
+        "source_xml": "/tmp/quartz-acceptance-java21-reports/co-quartz-jdbc/failsafe-reports/TEST-io.github.cococzl.coquartz.jdbc.ContainerDatabaseLogIT.xml",
+        "sha256": "bc9ce092d64e4acdd88d53141e5a7c51a1ce04a4ea0f854edc9e93012c77b390"
+      },
+      {
+        "module": "co-quartz-jdbc",
+        "runner": "surefire-reports",
+        "class": "io.github.cococzl.coquartz.jdbc.config.DeclarativeRestartAcceptanceTest",
+        "counts": {
+          "tests": 1,
+          "failures": 0,
+          "errors": 0,
+          "skipped": 0,
+          "passed": 1
+        },
+        "java": "21.0.9",
+        "source_xml": "/tmp/quartz-acceptance-java21-reports/co-quartz-jdbc/surefire-reports/TEST-io.github.cococzl.coquartz.jdbc.config.DeclarativeRestartAcceptanceTest.xml",
+        "sha256": "d3108e39dcbfd824b268b547743a9684e115d155c2bc93ed8cdaa63e2303fffb"
+      },
+      {
+        "module": "co-quartz-jdbc",
+        "runner": "surefire-reports",
+        "class": "io.github.cococzl.coquartz.jdbc.repository.JdbcTaskLogRepositoryTest",
+        "counts": {
+          "tests": 23,
+          "failures": 0,
+          "errors": 0,
+          "skipped": 0,
+          "passed": 23
+        },
+        "java": "21.0.9",
+        "source_xml": "/tmp/quartz-acceptance-java21-reports/co-quartz-jdbc/surefire-reports/TEST-io.github.cococzl.coquartz.jdbc.repository.JdbcTaskLogRepositoryTest.xml",
+        "sha256": "dd9d3a28106370553d01b27e9eea6a0b3a614fae017929d0bef33b0a43388a83"
+      },
+      {
+        "module": "co-quartz-jdbc",
+        "runner": "surefire-reports",
+        "class": "io.github.cococzl.coquartz.jdbc.service.JdbcAsyncTaskLogServiceTest",
+        "counts": {
+          "tests": 11,
+          "failures": 0,
+          "errors": 0,
+          "skipped": 0,
+          "passed": 11
+        },
+        "java": "21.0.9",
+        "source_xml": "/tmp/quartz-acceptance-java21-reports/co-quartz-jdbc/surefire-reports/TEST-io.github.cococzl.coquartz.jdbc.service.JdbcAsyncTaskLogServiceTest.xml",
+        "sha256": "0f77352f086b823345e1aea6dc8907fd1a916fad19ec925634f2e60cdf4d30dc"
+      },
+      {
+        "module": "co-quartz-jdbc",
+        "runner": "surefire-reports",
+        "class": "io.github.cococzl.coquartz.jdbc.service.JdbcReliableAuditServiceTest",
+        "counts": {
+          "tests": 3,
+          "failures": 0,
+          "errors": 0,
+          "skipped": 0,
+          "passed": 3
+        },
+        "java": "21.0.9",
+        "source_xml": "/tmp/quartz-acceptance-java21-reports/co-quartz-jdbc/surefire-reports/TEST-io.github.cococzl.coquartz.jdbc.service.JdbcReliableAuditServiceTest.xml",
+        "sha256": "205e13ac2e7f72239c2bad2318e283dec25e991c586689e6d439061e53006423"
+      }
+    ]
+  },
+  "targeted_java17_boot_3_3_13": {
+    "scope": "selected final suites; not a clean full matrix",
+    "totals": {
+      "tests": 73,
+      "passed": 73,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    },
+    "suites": [
+      {
+        "module": "co-quartz-core",
+        "runner": "surefire-reports",
+        "class": "io.github.cococzl.coquartz.core.BuilderScheduleRegressionTest",
+        "counts": {
+          "tests": 6,
+          "failures": 0,
+          "errors": 0,
+          "skipped": 0,
+          "passed": 6
+        },
+        "java": "17.0.12",
+        "source_xml": "/tmp/quartz-acceptance-java17-reports/co-quartz-core/surefire-reports/TEST-io.github.cococzl.coquartz.core.BuilderScheduleRegressionTest.xml",
+        "sha256": "028e69b44f96eaf982248bbbfff074fc1b290fa17d8bc474daf6098acfa8a032"
+      },
+      {
+        "module": "co-quartz-core",
+        "runner": "surefire-reports",
+        "class": "io.github.cococzl.coquartz.core.NativeAuditExecutionTest",
+        "counts": {
+          "tests": 8,
+          "failures": 0,
+          "errors": 0,
+          "skipped": 0,
+          "passed": 8
+        },
+        "java": "17.0.12",
+        "source_xml": "/tmp/quartz-acceptance-java17-reports/co-quartz-core/surefire-reports/TEST-io.github.cococzl.coquartz.core.NativeAuditExecutionTest.xml",
+        "sha256": "2fd2be34366f62c050dfd62e9a4e344a95e777ba60bf866cdb53ea4050c9fc3c"
+      },
+      {
+        "module": "co-quartz-core",
+        "runner": "surefire-reports",
+        "class": "io.github.cococzl.coquartz.core.QuartzConcurrencyTest",
+        "counts": {
+          "tests": 5,
+          "failures": 0,
+          "errors": 0,
+          "skipped": 0,
+          "passed": 5
+        },
+        "java": "17.0.12",
+        "source_xml": "/tmp/quartz-acceptance-java17-reports/co-quartz-core/surefire-reports/TEST-io.github.cococzl.coquartz.core.QuartzConcurrencyTest.xml",
+        "sha256": "ff7e3dfb00957f7f63ba3d13096d5dee1b35356689068b4b9b73a13f8a0e5608"
+      },
+      {
+        "module": "co-quartz-core",
+        "runner": "surefire-reports",
+        "class": "io.github.cococzl.coquartz.core.QuartzJobReconciliationTest",
+        "counts": {
+          "tests": 19,
+          "failures": 0,
+          "errors": 0,
+          "skipped": 0,
+          "passed": 19
+        },
+        "java": "17.0.12",
+        "source_xml": "/tmp/quartz-acceptance-java17-reports/co-quartz-core/surefire-reports/TEST-io.github.cococzl.coquartz.core.QuartzJobReconciliationTest.xml",
+        "sha256": "a5357006da6fa7a9b549bd640fa56ad774d7796bfaf07b4bfe178a3d43bcd814"
+      },
+      {
+        "module": "co-quartz-jdbc",
+        "runner": "surefire-reports",
+        "class": "io.github.cococzl.coquartz.jdbc.config.DeclarativeRestartAcceptanceTest",
+        "counts": {
+          "tests": 1,
+          "failures": 0,
+          "errors": 0,
+          "skipped": 0,
+          "passed": 1
+        },
+        "java": "17.0.12",
+        "source_xml": "/tmp/quartz-acceptance-java17-reports/co-quartz-jdbc/surefire-reports/TEST-io.github.cococzl.coquartz.jdbc.config.DeclarativeRestartAcceptanceTest.xml",
+        "sha256": "a43897f7d970dcc35f589509a4c272af1511703fc5a8c5974c8beb078cb77092"
+      },
+      {
+        "module": "co-quartz-jdbc",
+        "runner": "surefire-reports",
+        "class": "io.github.cococzl.coquartz.jdbc.repository.JdbcTaskLogRepositoryTest",
+        "counts": {
+          "tests": 23,
+          "failures": 0,
+          "errors": 0,
+          "skipped": 0,
+          "passed": 23
+        },
+        "java": "17.0.12",
+        "source_xml": "/tmp/quartz-acceptance-java17-reports/co-quartz-jdbc/surefire-reports/TEST-io.github.cococzl.coquartz.jdbc.repository.JdbcTaskLogRepositoryTest.xml",
+        "sha256": "9979492807c6382e9cec8a594ee86094c480aabe39f3162f945798b47ff9405e"
+      },
+      {
+        "module": "co-quartz-jdbc",
+        "runner": "surefire-reports",
+        "class": "io.github.cococzl.coquartz.jdbc.service.JdbcAsyncTaskLogServiceTest",
+        "counts": {
+          "tests": 11,
+          "failures": 0,
+          "errors": 0,
+          "skipped": 0,
+          "passed": 11
+        },
+        "java": "17.0.12",
+        "source_xml": "/tmp/quartz-acceptance-java17-reports/co-quartz-jdbc/surefire-reports/TEST-io.github.cococzl.coquartz.jdbc.service.JdbcAsyncTaskLogServiceTest.xml",
+        "sha256": "afe36ac31263feea14f1a43bcefaa57034cbb0027f2c40b9b6de5d1905d37c23"
+      }
+    ]
+  },
+  "original_java17_boot_3_3_13": {
+    "scope": "historical saved counts and logs; original XML overwritten before acceptance",
+    "modules": {
+      "core": {
+        "passed": 202,
+        "skipped": 5,
+        "failures": 0,
+        "errors": 0
+      },
+      "jdbc": {
+        "passed": 47,
+        "skipped": 0,
+        "failures": 0,
+        "errors": 0
+      },
+      "starter": {
+        "passed": 11,
+        "skipped": 0,
+        "failures": 0,
+        "errors": 0
+      }
+    },
+    "artifacts": [
+      {
+        "path": "/tmp/quartz-final-java17.log",
+        "sha256": "8462d3c9bb6d8d60559f5309b008f520164878a66d9e9acde83a240a27285006"
+      },
+      {
+        "path": "/tmp/quartz-final-java17-counts.txt",
+        "sha256": "534292b34d40863c0443dcecf5064be2c66c85f9749eb5cdec126432d1d843f1"
+      }
+    ]
+  },
+  "reviewed_implementation_head": "94b998d"
+}

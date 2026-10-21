@@ -2,6 +2,8 @@
 
 每项按回归测试 RED → 最小修复 GREEN 执行；未运行的数据库/集群场景不计为通过。
 
+后续独立验收见 [review-acceptance.md](review-acceptance.md) 与 [逐类结果索引](review-acceptance-results.json)。本文件的 270/260 是原 `036f95f` clean 构建结果；验收又发现并修复六处组合/升级缺陷，只定向补测，不把历史全量结果宣称为当前 HEAD 全矩阵重跑。集群 standby/排空/单写者和旧节点回退契约以验收说明及 README 为准。
+
 ## R01
 
 确认成立。H2 JDBC 声明式任务失败、关闭上下文和 Scheduler 后重新注册，修复前因内部重试被判冲突而失败（1 error）；修复后 `mvn -q -pl co-quartz-core -Dtest=QuartzJdbcRetryPersistenceTest,QuartzJobReconciliationTest test`：14 通过。
