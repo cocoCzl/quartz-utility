@@ -108,6 +108,38 @@ public class JdbcTaskLogRepository implements TaskLogRepository {
         );
     }
 
+    private Object[] insertArguments(TaskExecutionLog entry) {
+        return new Object[]{entry.getId(), entry.getJobKey(), entry.getTriggerKey(), entry.getStartTime(),
+                entry.getEndTime(), entry.getExecutionTimeMs(), entry.getExecState() == null
+                ? LogTaskExecStateEnum.UNKNOWN.getCode() : entry.getExecState().getCode(), entry.getErrorMessage(),
+                entry.getStackTrace(), entry.getAttempt(), entry.isFinalAttempt(), entry.getExecuteTime(),
+                entry.getExecutionId(), entry.getFireInstanceId(), entry.getSchedulerInstanceId(), entry.getDefinitionVersion(),
+                entry.getSchedulerName(), entry.getApplicationNamespace(), entry.getOriginTriggerKey(), entry.getOriginScheduledTime()};
+    }
+
+    @Override
+    public List<TaskExecutionLog> insertBatch(List<TaskExecutionLog> entries) {
+        if (entries.isEmpty()) return List.of();
+        var transaction = new org.springframework.transaction.support.TransactionTemplate(
+                new org.springframework.jdbc.datasource.DataSourceTransactionManager(jdbcTemplate.getDataSource()));
+        try {
+            transaction.executeWithoutResult(status -> jdbcTemplate.batchUpdate(INSERT_SQL,
+                    entries.stream().map(this::insertArguments).toList()));
+            return List.of();
+        } catch (RuntimeException batchFailure) {
+            // Transaction rollback removes partial batch effects; retry rows individually to isolate invalid entries.
+            List<TaskExecutionLog> failed = new java.util.ArrayList<>();
+            for (TaskExecutionLog entry : entries) {
+                try { insert(entry); }
+                catch (org.springframework.dao.DuplicateKeyException duplicate) {
+                    try { assertSameCompletion(lifecycleRecord(entry.getId()), entry); }
+                    catch (RuntimeException conflict) { failed.add(entry); }
+                } catch (RuntimeException failure) { failed.add(entry); }
+            }
+            return failed;
+        }
+    }
+
     @Override
     public void updateLifecycle(TaskExecutionLog log) {
         if (log.getExecState() == null || log.getExecState() == LogTaskExecStateEnum.STARTED

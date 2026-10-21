@@ -79,6 +79,20 @@ class JdbcTaskLogRepositoryTest {
     }
 
     @Test
+    void batchRollbackIsolatesInvalidRowsAndAcceptsIdenticalDuplicateIds() {
+        var first = createLog("batch", LogTaskExecStateEnum.SUCCESS, 1, true);
+        var invalid = createLog("batch", LogTaskExecStateEnum.SUCCESS, 1, true);
+        invalid.setJobKey(null);
+        var last = createLog("batch", LogTaskExecStateEnum.SUCCESS, 1, true);
+        assertThat(repository.insertBatch(List.of(first, invalid, last))).containsExactly(invalid);
+        assertThat(repository.latestLogs("batch", 10)).hasSize(2);
+        assertThat(repository.insertBatch(List.of(first, last))).isEmpty();
+        assertThat(repository.latestLogs("batch", 10)).hasSize(2);
+        first.setExecutionId("different");
+        assertThat(repository.insertBatch(List.of(first))).containsExactly(first);
+    }
+
+    @Test
     void reliableAuditLifecycleUpdatesStartedRecordIdempotently() {
         TaskExecutionLog started = createLog("DEFAULT.auditJob", LogTaskExecStateEnum.STARTED, 1, false);
         started.setEndTime(null);

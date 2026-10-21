@@ -64,12 +64,18 @@ public class CoQuartzJdbcAutoConfiguration {
             @Qualifier("coQuartzLogDataSource") ObjectProvider<DataSource> logDataSource,
             ObjectProvider<DataSource> dataSources) {
         DataSource dedicated = logDataSource.getIfAvailable();
-        if (dedicated != null) return new JdbcTemplate(dedicated);
+        if (dedicated != null) return logJdbcTemplate(dedicated);
         java.util.List<DataSource> candidates = dataSources.orderedStream().toList();
-        if (candidates.size() == 1) return new JdbcTemplate(candidates.get(0));
+        if (candidates.size() == 1) return logJdbcTemplate(candidates.get(0));
         throw new IllegalStateException(candidates.isEmpty()
                 ? "Co-Quartz logging is enabled but no DataSource is available; configure co-quartz.log.datasource.url"
                 : "Co-Quartz logging found multiple DataSources; provide a coQuartzLogDataSource bean or configure co-quartz.log.datasource.url");
+    }
+
+    private JdbcTemplate logJdbcTemplate(DataSource dataSource) {
+        JdbcTemplate jdbc = new JdbcTemplate(dataSource);
+        jdbc.setQueryTimeout(5);
+        return jdbc;
     }
 
     @Bean

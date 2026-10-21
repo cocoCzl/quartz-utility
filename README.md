@@ -375,3 +375,5 @@ mvn verify -Pintegration-tests
 可靠审计归属使用 `co-quartz.scheduling.application-namespace`（默认 `default`，共享日志库的不同应用必须配置不同值）、schedulerName、instanceId、fireInstanceId、executionId。V3 升级 SQL 位于 `co-quartz-jdbc/src/main/resources/db/migration/<dialect>/V3__audit_ownership.sql`，旧记录归属保持 NULL。
 
 已取消仅凭超龄 STARTED 自动判定中断的启动恢复。请通过 `recoverConfirmedStopped(cutoff, AuditRecoveryScope)` 显式提供应用、Scheduler、已确认停机的 instanceId 集合和运维证据编号；该工具可由运维重复/周期调用，原子 STARTED 条件更新允许多个恢复者竞争。AUTO instanceId 变化须使用旧节点身份及真实停机证据；远端、归属不明、其他应用记录不自动恢复。时间阈值只筛选候选记录，不是死亡证据。
+
+异步日志采用单消费者、容量或时间触发的 JDBC batch；批次事务失败后回滚，再隔离逐行失败，同身份同结果的重复 ID 可幂等接受。关闭先停止接收，最多等待 shutdown-flush-timeout-ms；超时后 queued 与 in-flight 均计入 unflushed，驱动忽略取消时后台写入仍可能继续。状态快照增加 accepted/persisted/in-flight，拒收和重排队失败计入 dropped，失败重试有上限且无额外无界 ID 缓存。默认日志 JdbcTemplate SQL 超时为 5 秒；连接获取/socket 超时仍需配置 DataSource/驱动。

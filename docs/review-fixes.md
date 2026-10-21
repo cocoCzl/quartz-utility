@@ -81,3 +81,9 @@ unschedule 优先且不安排重试；增强任务 refireImmediately 归一到�
 新增 V3 nullable 归属/原始 Trigger 字段及三方言升级 SQL。记录写入 applicationNamespace/schedulerName/instance/fire/execution，增强 STARTED/complete 复用同一身份。移除启动时 age-only 状态改写；旧 recoverInterruptedBefore 保留 API 但安全 no-op。新受控恢复入口要求 AuditRecoveryScope 明确停机节点与证据编号，仅恢复完全匹配归属；可重入并发恢复用 STARTED 条件更新。运维负责验证停机证据，不能把超龄或本机同 instanceId 视为已停止。
 
 未验证：真实多节点、AUTO 换号、外部运维证据系统。未引入靠时间判死的自动周期扫描。调用者可在获得证据后周期重试工具，短重启不会永久错过阈值。
+
+## R12
+
+确认成立。关闭后拒收及忽略中断数据库回归修复前 1 failure、1 timeout。修复后 `mvn -q -pl co-quartz-jdbc -am -Dtest=JdbcAsyncTaskLogServiceTest,JdbcTaskLogRepositoryTest -Dsurefire.failIfNoSpecifiedTests=false test`：25 通过。
+
+新增兼容默认 insertBatch 接口，JDBC 实现事务 batchUpdate、失败回滚后逐行隔离，重复 ID 核对身份与结果。异步写统一单消费者，容量阈值立即提交、每轮继续多批，重试延至下一轮，retry 次数随有界队列项保存，无废弃 ID 缓存。shutdown 停止接收并仅在独立消费者执行排空，调用方有界 await，queued+in-flight 在超时后仍可见。计数包含 accepted/persisted/in-flight/dropped/permanent-failed。已验证阈值触发、部分失败/重复 ID、慢数据库与有界关闭；驱动不响应取消时不会宣称写入已完成。

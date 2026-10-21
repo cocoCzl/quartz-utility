@@ -1,164 +1,131 @@
 package io.github.cococzl.coquartz.jdbc.service;
 
-import io.github.cococzl.coquartz.dto.TaskExecutionLog;
-import io.github.cococzl.coquartz.dto.AsyncLogPipelineStatus;
-import io.github.cococzl.coquartz.event.TaskLogPipelineEvent;
-import io.github.cococzl.coquartz.event.AlertEventPublisher;
-import io.github.cococzl.coquartz.service.AsyncTaskLogService;
-import io.github.cococzl.coquartz.service.TaskLogRepository;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
+import io.github.cococzl.coquartz.dto.*;
+import io.github.cococzl.coquartz.event.*;
+import io.github.cococzl.coquartz.service.*;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.beans.factory.ObjectProvider;
+import java.util.*;
+import java.util.concurrent.*;
+import java.util.concurrent.atomic.*;
 
-import java.util.ArrayList;
-import java.util.List;
-import java.util.concurrent.LinkedBlockingQueue;
-import java.util.concurrent.ScheduledExecutorService;
-import java.util.concurrent.ScheduledThreadPoolExecutor;
-import java.util.concurrent.TimeUnit;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.atomic.AtomicLong;
-
+/** Single-consumer bounded pipeline. JDBC cancellation is cooperative; unresolved in-flight work stays visible. */
 public class JdbcAsyncTaskLogService implements AsyncTaskLogService {
+    private record Pending(TaskExecutionLog entry, int failures) { }
+    private final TaskLogRepository repository;
+    private final LinkedBlockingQueue<Pending> queue;
+    private final ScheduledThreadPoolExecutor consumer;
+    private final int batchSize, maxWriteRetries;
+    private final long shutdownTimeoutMs;
+    private final Object lifecycle = new Object();
+    private volatile boolean accepting = true;
+    private volatile Thread consumerThread;
+    private final AtomicBoolean requested = new AtomicBoolean();
+    private final AtomicInteger inFlight = new AtomicInteger();
+    private final AtomicLong dropped = new AtomicLong(), failed = new AtomicLong(), permanent = new AtomicLong();
+    private final AtomicLong persisted = new AtomicLong(), accepted = new AtomicLong(), unflushed = new AtomicLong();
+    private final ApplicationEventPublisher events;
+    private final ObjectProvider<AlertEventPublisher> alertProvider;
 
-    private static final Logger log = LoggerFactory.getLogger(JdbcAsyncTaskLogService.class);
-
-    private final TaskLogRepository taskLogRepository;
-    private final LinkedBlockingQueue<TaskExecutionLog> queue;
-    private final ScheduledExecutorService scheduler;
-    private final int batchSize;
-    private final long flushIntervalMs;
-    private final long shutdownFlushTimeoutMs;
-    private final int maxWriteRetries;
-    private final ApplicationEventPublisher eventPublisher;
-    private final ObjectProvider<AlertEventPublisher> alertEventPublisherProvider;
-    private final ConcurrentHashMap<String, Integer> writeAttempts = new ConcurrentHashMap<>();
-    private final AtomicLong droppedCount = new AtomicLong();
-    private final AtomicLong writeFailureCount = new AtomicLong();
-    private final AtomicLong permanentFailureCount = new AtomicLong();
-    private final AtomicLong unflushedCount = new AtomicLong();
-
-    public JdbcAsyncTaskLogService(TaskLogRepository taskLogRepository,
-                                     int queueCapacity,
-                                     int batchSize,
-                                     long flushIntervalMs) {
-        this(taskLogRepository, queueCapacity, batchSize, flushIntervalMs, 10_000, 3, null);
+    public JdbcAsyncTaskLogService(TaskLogRepository repository, int capacity, int batchSize, long intervalMs) {
+        this(repository, capacity, batchSize, intervalMs, 10000, 3, null);
     }
-
-    public JdbcAsyncTaskLogService(TaskLogRepository taskLogRepository, int queueCapacity, int batchSize,
-                                   long flushIntervalMs, long shutdownFlushTimeoutMs, int maxWriteRetries,
-                                   ApplicationEventPublisher eventPublisher) {
-        this(taskLogRepository, queueCapacity, batchSize, flushIntervalMs, shutdownFlushTimeoutMs, maxWriteRetries,
-                eventPublisher, null);
+    public JdbcAsyncTaskLogService(TaskLogRepository repository, int capacity, int batchSize, long intervalMs,
+                                   long shutdownMs, int retries, ApplicationEventPublisher events) {
+        this(repository, capacity, batchSize, intervalMs, shutdownMs, retries, events, null);
     }
-
-    public JdbcAsyncTaskLogService(TaskLogRepository taskLogRepository, int queueCapacity, int batchSize,
-                                   long flushIntervalMs, long shutdownFlushTimeoutMs, int maxWriteRetries,
-                                   ApplicationEventPublisher eventPublisher,
-                                   ObjectProvider<AlertEventPublisher> alertEventPublisherProvider) {
-        this.taskLogRepository = taskLogRepository;
-        this.queue = new LinkedBlockingQueue<>(queueCapacity);
-        this.batchSize = batchSize;
-        this.flushIntervalMs = flushIntervalMs;
-        this.shutdownFlushTimeoutMs = shutdownFlushTimeoutMs;
-        this.maxWriteRetries = Math.max(0, maxWriteRetries);
-        this.eventPublisher = eventPublisher;
-        this.alertEventPublisherProvider = alertEventPublisherProvider;
-        this.scheduler = new ScheduledThreadPoolExecutor(1, r -> {
-            Thread t = new Thread(r, "co-quartz-log-flusher");
-            t.setDaemon(true);
-            return t;
+    public JdbcAsyncTaskLogService(TaskLogRepository repository, int capacity, int batchSize, long intervalMs,
+                                   long shutdownMs, int retries, ApplicationEventPublisher events,
+                                   ObjectProvider<AlertEventPublisher> alertProvider) {
+        this.repository = repository; this.queue = new LinkedBlockingQueue<>(capacity);
+        this.batchSize = batchSize; this.shutdownTimeoutMs = shutdownMs;
+        this.maxWriteRetries = Math.max(0, retries); this.events = events; this.alertProvider = alertProvider;
+        consumer = new ScheduledThreadPoolExecutor(1, action -> {
+            Thread thread = new Thread(action, "co-quartz-log-flusher"); thread.setDaemon(true);
+            consumerThread = thread; return thread;
         });
-        this.scheduler.scheduleWithFixedDelay(this::flushLogsInternal, flushIntervalMs, flushIntervalMs, TimeUnit.MILLISECONDS);
+        consumer.setExecuteExistingDelayedTasksAfterShutdownPolicy(false);
+        consumer.setContinueExistingPeriodicTasksAfterShutdownPolicy(false);
+        consumer.scheduleWithFixedDelay(this::drainOnce, intervalMs, intervalMs, TimeUnit.MILLISECONDS);
     }
-
-    @Override
-    public void logTaskExecutionAsync(TaskExecutionLog taskLog) {
-        if (!queue.offer(taskLog)) {
-            long dropped = droppedCount.incrementAndGet();
-            log.warn("Async log queue is full, dropping log entry for job: {}", taskLog.getJobKey());
-            publish(TaskLogPipelineEvent.Type.QUEUE_FULL, dropped);
+    public void logTaskExecutionAsync(TaskExecutionLog entry) {
+        boolean rejected;
+        synchronized (lifecycle) {
+            rejected = !accepting || !queue.offer(new Pending(entry, 0));
+            if (!rejected) accepted.incrementAndGet();
         }
+        if (rejected) { publish(TaskLogPipelineEvent.Type.QUEUE_FULL, dropped.incrementAndGet()); return; }
+        if (queue.size() >= batchSize) requestFlush();
     }
-
-    @Override
+    private void requestFlush() {
+        if (!requested.compareAndSet(false, true)) return;
+        try { consumer.execute(() -> { try { drainOnce(); } finally { requested.set(false); } }); }
+        catch (RejectedExecutionException closing) { requested.set(false); }
+    }
     public void flushLogsImmediately() {
-        flushLogsInternal();
+        if (Thread.currentThread() == consumerThread) return;
+        try { consumer.submit(this::drainOnce).get(); }
+        catch (RejectedExecutionException closed) { }
+        catch (InterruptedException interrupted) { Thread.currentThread().interrupt(); }
+        catch (ExecutionException failure) { throw new IllegalStateException("Log flush failed", failure.getCause()); }
     }
-
-    @Override
-    public void shutdown() {
-        scheduler.shutdown();
-        long deadline = System.nanoTime() + TimeUnit.MILLISECONDS.toNanos(shutdownFlushTimeoutMs);
-        while (!queue.isEmpty() && System.nanoTime() < deadline) {
-            flushLogsInternal();
-        }
-        try {
-            long remainingMs = Math.max(0, TimeUnit.NANOSECONDS.toMillis(deadline - System.nanoTime()));
-            if (!scheduler.awaitTermination(remainingMs, TimeUnit.MILLISECONDS)) {
-                scheduler.shutdownNow();
-            }
-        } catch (InterruptedException e) {
-            scheduler.shutdownNow();
-            Thread.currentThread().interrupt();
-        }
-        long remaining = queue.size();
-        unflushedCount.set(remaining);
-        if (remaining > 0) {
-            publish(TaskLogPipelineEvent.Type.SHUTDOWN_UNFLUSHED, remaining);
-        }
-    }
-
-    @Override
-    public int getQueueSize() {
-        return queue.size();
-    }
-
-    @Override
-    public AsyncLogPipelineStatus getPipelineStatus() {
-        return new AsyncLogPipelineStatus(queue.size(), droppedCount.get(), writeFailureCount.get(),
-                permanentFailureCount.get(), unflushedCount.get());
-    }
-
-    private void flushLogsInternal() {
-        List<TaskExecutionLog> batch = new ArrayList<>();
-        queue.drainTo(batch, batchSize);
-        if (batch.isEmpty()) {
-            return;
-        }
-        for (TaskExecutionLog taskLog : batch) {
-            try {
-                taskLogRepository.insert(taskLog);
-                writeAttempts.remove(taskLog.getId());
-            } catch (Exception e) {
-                writeFailureCount.incrementAndGet();
-                log.error("Failed to insert task log for job: {}: {}", taskLog.getJobKey(), new io.github.cococzl.coquartz.service.DefaultLogSanitizer().sanitize(e.getMessage()));
-                int attempts = writeAttempts.merge(taskLog.getId(), 1, Integer::sum);
-                if (attempts > maxWriteRetries) {
-                    permanentFailureCount.incrementAndGet();
-                    writeAttempts.remove(taskLog.getId());
-                    publish(TaskLogPipelineEvent.Type.PERMANENT_WRITE_FAILURE, permanentFailureCount.get());
-                } else if (!queue.offer(taskLog)) {
-                    long dropped = droppedCount.incrementAndGet();
-                    log.warn("Failed to re-queue log entry for job: {}", taskLog.getJobKey());
-                    publish(TaskLogPipelineEvent.Type.QUEUE_FULL, dropped);
+    private void drainOnce() {
+        int budget = queue.size(); // retries are deferred to the next flush; one faulty row cannot spin forever
+        while (budget > 0) {
+            List<Pending> batch = new ArrayList<>();
+            queue.drainTo(batch, Math.min(batchSize, budget));
+            if (batch.isEmpty()) return;
+            budget -= batch.size(); inFlight.set(batch.size());
+            List<TaskExecutionLog> failures;
+            try { failures = repository.insertBatch(batch.stream().map(Pending::entry).toList()); }
+            catch (RuntimeException failure) { failures = batch.stream().map(Pending::entry).toList(); }
+            Set<TaskExecutionLog> failedEntries = Collections.newSetFromMap(new IdentityHashMap<>());
+            failedEntries.addAll(failures);
+            for (Pending pending : batch) {
+                if (!failedEntries.contains(pending.entry())) persisted.incrementAndGet();
+                else {
+                    failed.incrementAndGet();
+                    if (pending.failures() >= maxWriteRetries) {
+                        publish(TaskLogPipelineEvent.Type.PERMANENT_WRITE_FAILURE, permanent.incrementAndGet());
+                    } else if (!queue.offer(new Pending(pending.entry(), pending.failures() + 1))) {
+                        publish(TaskLogPipelineEvent.Type.QUEUE_FULL, dropped.incrementAndGet());
+                    }
                 }
+                inFlight.decrementAndGet();
             }
         }
     }
-
-    private void publish(TaskLogPipelineEvent.Type type, long count) {
-        AlertEventPublisher alertPublisher = alertEventPublisherProvider == null ? null : alertEventPublisherProvider.getIfAvailable();
-        if (alertPublisher != null) {
-            alertPublisher.publishLogPipeline(type, count);
-            return;
+    public void shutdown() {
+        synchronized (lifecycle) {
+            if (!accepting) return;
+            accepting = false;
         }
-        if (eventPublisher == null) return;
+        long deadline = System.nanoTime() + TimeUnit.MILLISECONDS.toNanos(shutdownTimeoutMs);
+        if (shutdownTimeoutMs > 0) {
+            try {
+                consumer.execute(() -> {
+                    while (!queue.isEmpty() && System.nanoTime() < deadline) drainOnce();
+                });
+            } catch (RejectedExecutionException ignored) { }
+        }
+        consumer.shutdown();
         try {
-            eventPublisher.publishEvent(new TaskLogPipelineEvent(this, type, count));
-        } catch (Exception eventFailure) {
-            log.warn("Failed to publish execution-log pipeline event {}: {}", type, new io.github.cococzl.coquartz.service.DefaultLogSanitizer().sanitize(eventFailure.getMessage()));
-        }
+            if (!consumer.awaitTermination(Math.max(0, deadline - System.nanoTime()), TimeUnit.NANOSECONDS)) consumer.shutdownNow();
+        } catch (InterruptedException interrupted) { consumer.shutdownNow(); Thread.currentThread().interrupt(); }
+        long remaining = (long) queue.size() + inFlight.get();
+        unflushed.set(remaining);
+        if (remaining > 0) publish(TaskLogPipelineEvent.Type.SHUTDOWN_UNFLUSHED, remaining);
+    }
+    public int getQueueSize() { return queue.size(); }
+    public AsyncLogPipelineStatus getPipelineStatus() {
+        return new AsyncLogPipelineStatus(queue.size(), dropped.get(), failed.get(), permanent.get(),
+                unflushed.get(), inFlight.get(), persisted.get(), accepted.get());
+    }
+    private void publish(TaskLogPipelineEvent.Type type, long count) {
+        try {
+            AlertEventPublisher alert = alertProvider == null ? null : alertProvider.getIfAvailable();
+            if (alert != null) alert.publishLogPipeline(type, count);
+            else if (events != null) events.publishEvent(new TaskLogPipelineEvent(this, type, count));
+        } catch (RuntimeException ignored) { /* Pipeline counters remain authoritative. */ }
     }
 }

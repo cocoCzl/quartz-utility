@@ -13,6 +13,15 @@ public interface TaskLogRepository {
 
     void insert(TaskExecutionLog log);
 
+    /** Writes a batch and returns only entries that failed. Existing implementations retain row fallback. */
+    default List<TaskExecutionLog> insertBatch(List<TaskExecutionLog> entries) {
+        List<TaskExecutionLog> failed = new java.util.ArrayList<>();
+        for (TaskExecutionLog entry : entries) {
+            try { insert(entry); } catch (RuntimeException failure) { failed.add(entry); }
+        }
+        return failed;
+    }
+
     /** Updates an existing reliable-audit lifecycle record. Implementations must be idempotent. */
     default void updateLifecycle(TaskExecutionLog log) {
         throw new UnsupportedOperationException("Reliable audit is not supported by this task-log repository");

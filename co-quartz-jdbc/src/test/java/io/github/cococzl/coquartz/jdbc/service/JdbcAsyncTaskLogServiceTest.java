@@ -63,6 +63,39 @@ class JdbcAsyncTaskLogServiceTest {
     }
 
     @Test
+    void closedPipelineRejectsNewEntriesWithVisibleDropCount() {
+        asyncLogService.shutdown();
+        asyncLogService.logTaskExecutionAsync(createLog("after-close"));
+        assertThat(asyncLogService.getQueueSize()).isZero();
+        assertThat(asyncLogService.getPipelineStatus().droppedCount()).isEqualTo(1);
+    }
+
+    @Test
+    void shutdownIsBoundedEvenWhenDatabaseIgnoresInterruption() throws Exception {
+        asyncLogService.shutdown();
+        var entered = new java.util.concurrent.CountDownLatch(1);
+        var release = new java.util.concurrent.CountDownLatch(1);
+        var slow = org.mockito.Mockito.mock(io.github.cococzl.coquartz.service.TaskLogRepository.class,
+                org.mockito.Mockito.CALLS_REAL_METHODS);
+        org.mockito.Mockito.doAnswer(call -> {
+            entered.countDown();
+            while (release.getCount() > 0) {
+                try { release.await(); } catch (InterruptedException ignored) { }
+            }
+            return null;
+        }).when(slow).insert(org.mockito.ArgumentMatchers.any());
+        asyncLogService = new JdbcAsyncTaskLogService(slow, 10, 10, 60000, 30, 0, null);
+        asyncLogService.logTaskExecutionAsync(createLog("slow"));
+        var close = java.util.concurrent.Executors.newSingleThreadExecutor();
+        try {
+            var result = close.submit(asyncLogService::shutdown);
+            assertThat(entered.await(1, java.util.concurrent.TimeUnit.SECONDS)).isTrue();
+            result.get(500, java.util.concurrent.TimeUnit.MILLISECONDS);
+            assertThat(asyncLogService.getPipelineStatus().unflushedCount()).isEqualTo(1);
+        } finally { release.countDown(); close.shutdownNow(); }
+    }
+
+    @Test
     void logTaskExecutionAsync_flushesToRepository() throws Exception {
         asyncLogService.logTaskExecutionAsync(createLog("DEFAULT.asyncJob"));
         asyncLogService.flushLogsImmediately();
@@ -83,6 +116,20 @@ class JdbcAsyncTaskLogServiceTest {
 
         List<TaskExecutionLog> logs = repository.latestLogs("DEFAULT.batchJob", 10);
         assertThat(logs).hasSize(5);
+    }
+
+    @Test
+    void capacityThresholdFlushesWithoutWaitingForLongTimerAndAccountsForPersistedWork() throws Exception {
+        asyncLogService.shutdown();
+        asyncLogService = new JdbcAsyncTaskLogService(repository, 100, 2, 60000);
+        for (int i = 0; i < 8; i++) asyncLogService.logTaskExecutionAsync(createLog("threshold"));
+        asyncLogService.flushLogsImmediately();
+        assertThat(repository.latestLogs("threshold", 20)).hasSize(8);
+        var status = asyncLogService.getPipelineStatus();
+        assertThat(status.acceptedCount()).isEqualTo(8);
+        assertThat(status.persistedCount()).isEqualTo(8);
+        assertThat(status.inFlightCount()).isZero();
+        assertThat(status.queueSize()).isZero();
     }
 
     @Test
