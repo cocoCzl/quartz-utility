@@ -21,6 +21,7 @@ public class JdbcAsyncTaskLogService implements AsyncTaskLogService {
     private volatile boolean accepting = true;
     private volatile Thread consumerThread;
     private final AtomicBoolean requested = new AtomicBoolean();
+    private final AtomicLong capacitySignals = new AtomicLong();
     private final AtomicInteger inFlight = new AtomicInteger();
     private final AtomicLong dropped = new AtomicLong(), failed = new AtomicLong(), permanent = new AtomicLong();
     private final AtomicLong persisted = new AtomicLong(), accepted = new AtomicLong(), unflushed = new AtomicLong();
@@ -55,11 +56,23 @@ public class JdbcAsyncTaskLogService implements AsyncTaskLogService {
             if (!rejected) accepted.incrementAndGet();
         }
         if (rejected) { publish(TaskLogPipelineEvent.Type.QUEUE_FULL, dropped.incrementAndGet()); return; }
-        if (queue.size() >= batchSize) requestFlush();
+        if (queue.size() >= batchSize) {
+            capacitySignals.incrementAndGet();
+            requestFlush();
+        }
     }
     private void requestFlush() {
         if (!requested.compareAndSet(false, true)) return;
-        try { consumer.execute(() -> { try { drainOnce(); } finally { requested.set(false); } }); }
+        try { consumer.execute(() -> {
+            long signal = capacitySignals.get();
+            try { drainOnce(); }
+            finally {
+                requested.set(false);
+                // New arrivals can reach capacity while a write is blocked. Preserve their kick,
+                // but do not resubmit failed rows indefinitely when there are no new producers.
+                if (capacitySignals.get() != signal && queue.size() >= batchSize) requestFlush();
+            }
+        }); }
         catch (RejectedExecutionException closing) { requested.set(false); }
     }
     public void flushLogsImmediately() {

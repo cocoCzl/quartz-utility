@@ -123,13 +123,42 @@ class JdbcAsyncTaskLogServiceTest {
         asyncLogService.shutdown();
         asyncLogService = new JdbcAsyncTaskLogService(repository, 100, 2, 60000);
         for (int i = 0; i < 8; i++) asyncLogService.logTaskExecutionAsync(createLog("threshold"));
-        asyncLogService.flushLogsImmediately();
+        long deadline = System.nanoTime() + java.util.concurrent.TimeUnit.SECONDS.toNanos(2);
+        while (asyncLogService.getPipelineStatus().persistedCount() < 8 && System.nanoTime() < deadline) Thread.sleep(10);
         assertThat(repository.latestLogs("threshold", 20)).hasSize(8);
         var status = asyncLogService.getPipelineStatus();
         assertThat(status.acceptedCount()).isEqualTo(8);
         assertThat(status.persistedCount()).isEqualTo(8);
         assertThat(status.inFlightCount()).isZero();
         assertThat(status.queueSize()).isZero();
+    }
+
+    @Test
+    void arrivalsDuringBlockedBatchStillTriggerAutomaticCapacityFlush() throws Exception {
+        asyncLogService.shutdown();
+        var entered = new java.util.concurrent.CountDownLatch(1);
+        var release = new java.util.concurrent.CountDownLatch(1);
+        var writes = new java.util.concurrent.atomic.AtomicInteger();
+        var slow = org.mockito.Mockito.mock(io.github.cococzl.coquartz.service.TaskLogRepository.class);
+        org.mockito.Mockito.when(slow.insertBatch(org.mockito.ArgumentMatchers.anyList())).thenAnswer(call -> {
+            if (writes.getAndIncrement() == 0) {
+                entered.countDown();
+                assertThat(release.await(5, java.util.concurrent.TimeUnit.SECONDS)).isTrue();
+            }
+            return repository.insertBatch(call.getArgument(0));
+        });
+        asyncLogService = new JdbcAsyncTaskLogService(slow, 100, 2, 60000);
+        try {
+            for (int i = 0; i < 2; i++) asyncLogService.logTaskExecutionAsync(createLog("arriving"));
+            assertThat(entered.await(2, java.util.concurrent.TimeUnit.SECONDS)).isTrue();
+            for (int i = 0; i < 2; i++) asyncLogService.logTaskExecutionAsync(createLog("arriving"));
+            release.countDown();
+            long deadline = System.nanoTime() + java.util.concurrent.TimeUnit.SECONDS.toNanos(2);
+            while (asyncLogService.getPipelineStatus().persistedCount() < 4 && System.nanoTime() < deadline) Thread.sleep(10);
+            assertThat(repository.latestLogs("arriving", 10)).hasSize(4);
+            assertThat(asyncLogService.getPipelineStatus().persistedCount()).isEqualTo(4);
+            assertThat(asyncLogService.getQueueSize()).isZero();
+        } finally { release.countDown(); }
     }
 
     @Test
