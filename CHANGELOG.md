@@ -30,4 +30,4 @@ All notable changes follow [Keep a Changelog](https://keepachangelog.com/en/1.1.
 - Add explicit definition retirement previews/tombstones and method binding fingerprints. Definition changes require all cluster nodes stopped/standby and a single writer; mixed-version live reconciliation is unsupported.
 - Distinguish primary/retry/manual/recovery triggers and local running scope; validate bounded, stably ordered log pagination. Reject invalid task policy values, @Async methods and Quartz useProperties=true.
 - Extend best-effort credential redaction in library-controlled records/events/logs, cache database metric samples off the scrape path, bound tag admission and correlate asynchronous alerts.
-- Pin Maven 3.9.9 and test plugins 3.5.4, provide subclass Mockito configuration, and explicitly enable real MySQL cluster tests in CI alongside container database tests. See docs/review-fixes.md for per-item RED/GREEN evidence and remaining validation limits.
+- Pin Maven 3.9.9 and test plugins 3.5.4, provide subclass Mockito configuration, and explicitly enable real MySQL cluster tests in CI alongside container database tests.

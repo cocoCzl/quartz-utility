@@ -371,15 +371,19 @@ CI 提供 MySQL 8.4 服务并强制检查集群用例未跳过；profile 另以 
 
 已取消仅凭超龄 STARTED 自动判定中断的启动恢复。请通过 `recoverConfirmedStopped(cutoff, AuditRecoveryScope)` 显式提供应用、Scheduler、已确认停机的 instanceId 集合和运维证据编号；该工具可由运维重复/周期调用，原子 STARTED 条件更新允许多个恢复者竞争。AUTO instanceId 变化须使用旧节点身份及真实停机证据；远端、归属不明、其他应用记录不自动恢复。时间阈值只筛选候选记录，不是死亡证据。
 
+升级时，旧 `recoverInterruptedBefore` 保留签名但不再更新记录，调用方应迁移到上述带停机证据的接口。DTO、告警事件及 `AsyncLogPipelineStatus` 新增关联或状态字段；后者保留五参数构造器，但 JSON 输出及 record 的 equals/hashCode/toString 会变化。可靠审计缺少所需服务时启动失败；完成记录的身份、时间或 origin 冲突会报错。
+
 异步日志采用单消费者、容量或时间触发的 JDBC batch；批次事务失败后回滚，再隔离逐行失败，同身份同结果的重复 ID 可幂等接受，时间按实际数据库列精度比较，origin 变化视为冲突。关闭先停止接收，最多等待 shutdown-flush-timeout-ms；超时后 queued 与 in-flight 均计入 unflushed，驱动忽略取消时后台写入仍可能继续。unflushed 是关闭返回时快照，不随晚到写入回改；当前 queued/in-flight/persisted 可继续变化。状态快照增加 accepted/persisted/in-flight，accepted 不含拒收，dropped 包含拒收和已接受但重排队失败，writeFailure 统计尝试次数，不能直接相加作严格守恒等式。失败重试有上限且无额外无界 ID 缓存。手工 flushLogsImmediately 同步等待驱动，不承诺关闭时限；旧手工同步事件发布路径还可能受监听器阻塞，自动配置使用异步告警。默认日志 JdbcTemplate SQL 超时为 5 秒；连接获取/socket 超时仍需配置 DataSource/驱动。
 
 生产告警执行器使用单线程和容量 256 的有界队列，满时拒绝并增加 `AlertEventPublisher.getDroppedCount()`；不会通过 CallerRunsPolicy 阻塞任务。相同 job/type 的普通失败、日志管道和审计失败事件在 1 秒内合并，可查询 getCoalescedCount()。连续失败状态限 1024 任务、1 小时 TTL，成功清除；仅是本节点窗口，容量淘汰可能重新开始计数。自动配置下审计失败事件也走这个异步通道，存储主异常不受监听器异常影响。手工构造 publisher 且不提供 executor 的旧构造器保持同步兼容。
 
 定义协调仅支持启动或 Scheduler standby 阶段，并拒绝本节点仍有执行任务时改写/退休定义。standby 和当前执行列表都是节点本地状态；standby 不会终止在执行的业务，新增检查只是点时快照，不是原子发布屏障。共享 JDBC 更新必须由部署系统停止/standby 所有节点、确认业务及在途分派排空、阻止并发 start，并保证单写者；推荐所有旧节点完成 shutdown(true)，再由尚未启动的新 Scheduler 发布。超时未确认终止不能算排空，应等待实际退出或中止部署。库中没有全节点协调、发布锁或 fencing。
 
-旧版本节点若重新启动，仍可能把新定义覆盖回旧定义或重建已退休任务：同 owner/namespace/兼容元数据下，内容 fingerprint 没有发布先后顺序，系统不会识别这种回退。必须由部署流程阻止旧版本自动重启/扩容；不能将同版本测试收敛当成混合版本滚动发布支持。暂停后换计划同样要求集群协调停机，单节点 pause-restore 标记不能代替分布式原子更新。定义指纹包含方法 beanName/methodName。完整验收与未验证边界见 [R01–R20 验收](docs/review-acceptance.md)。
+旧版本节点若重新启动，仍可能把新定义覆盖回旧定义或重建已退休任务：同 owner/namespace/兼容元数据下，内容 fingerprint 没有发布先后顺序，系统不会识别这种回退。必须由部署流程阻止旧版本自动重启/扩容；不能将同版本测试收敛当成混合版本滚动发布支持。暂停后换计划同样要求集群协调停机，单节点 pause-restore 标记不能代替分布式原子更新。定义指纹包含方法 beanName/methodName。
 
 Builder 默认 Trigger group 现跟随 Job group。升级旧版非默认 Job group 的任务时，若仍有属于本任务的同名 DEFAULT Trigger，隐式迁组会被拒绝；显式 triggerGroup("DEFAULT") 可保留原身份更新，或在排空/standby/单写者条件下显式迁移，避免遗留两个计划。
+
+Builder `executeNow` 仅创建尚不存在的一次性任务；触发已有任务应使用 `Scheduler.triggerJob`。动态 jobData 在 RAM 与 JDBC 模式下均只接受受支持的可持久化类型，最多 128 个键、64KiB；不接受任意 Serializable 或运行期 Bean。
 
 方法删除/重命名不会自动删除未扫描到的任务。使用显式 `DefinitionMigrationPlan(namespace, retiredJobKeys)`：先 preview 检查所有权，再在所有节点停止/standby、单执行者条件下 apply。仅匹配 namespace 且 code-owned 的任务可移除；legacy 无 namespace 需先同版本协调补元数据。可将旧任务保留为 enabled=false 的 tombstone 完成迁移。
 
@@ -390,6 +394,8 @@ Builder 默认 Trigger group 现跟随 Job group。升级旧版非默认 Job gro
 任务级策略统一边界：retryTimes=0..1000、retryInterval=0..60000ms、backoffMultiplier 为有限的 1..100、timeout=0..604800000ms。注解、Builder 和 RetryContext 一致校验；动态 jobData 采用重试快照的可持久化类型/大小约束且禁止 co-quartz 保留键。Boot 自动配置明确拒绝 Quartz useProperties=true（内部元数据需要类型值）；自建 Scheduler 也必须保持该选项为 false。方法任务不支持 @Async（包括类级），会在注册时拒绝；cron/timeZone 仍为字面值，`${...}` 环境配置扩展不在此次缺陷修复中。
 
 独立生产迁移位于 `co-quartz-jdbc/src/main/resources/db/migration/{h2,mysql,postgresql}`：新库顺序 V1→V2→V3；已有旧基线表先备份和核对列，跳过 V1，再执行尚未完成的版本。已包含 V2 列的库只执行 V3。脚本交给 Flyway/Liquibase/部署系统单执行者管理，应用无需 DDL 权限，关闭 auto-create-table。脚本不是任意重复执行安全的；尤其 MySQL DDL 可能隐式提交，部分失败需核对实际列/索引、完成缺失步骤并由迁移工具修复版本记录，禁止盲目重跑。当前 schema-quartz-task-log-*.sql 是全量安装快照，不是旧表升级脚本。自动 Java DDL 只支持单迁移者启动，不支持多节点同时迁移。
+
+审计幂等比较需要读取数据库列精度元数据，无需 DDL 权限；运行期修改 schema 后应重建 repository 或重启应用。
 
 执行指标按单次尝试计数（含 retry），逻辑执行通过 executionId 关联，active 包含原生观察路径与增强路径；连续失败按本节点完成回调顺序统计，不是集群聚合。指标 job 标签准入同步限制上限，超额归入 other。审计 STARTED gauge 后台每 5 秒刷新，首次可为 NaN，同时提供 sample_age_seconds 和 refresh_failures，抓取不访问日志数据库。告警提供 correlation：executionId、attempt、schedulerInstanceId、finalAttempt；日志管道等非执行事件可为空。告警 dropped/coalesced 提供低基数 gauge。
 
