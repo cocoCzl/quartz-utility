@@ -117,6 +117,7 @@ public class CoQuartzJobFactory extends SpringBeanJobFactory {
             log.debug("Wrapping job {} with EnhancedJob", bundle.getJobDetail().getKey());
             EnhancedJob decorated = new EnhancedJob(job, enhanced ? jobDataMap : new JobDataMap(), logWriter,
                     timeoutExecutor, alertEventPublisher, properties, metrics, logSanitizer, reliableAuditService);
+            decorated.setFrameworkPolicyEnabled(enhanced);
             decorated.setCleanup(job::close);
             return decorated;
         }

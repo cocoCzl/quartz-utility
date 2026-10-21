@@ -36,6 +36,9 @@ public class EnhancedJob implements InterruptableJob {
     private final CoQuartzMetrics metrics;
     private final LogSanitizer logSanitizer;
     private final ReliableAuditService reliableAuditService;
+    private boolean frameworkPolicyEnabled = true;
+
+    void setFrameworkPolicyEnabled(boolean enabled) { this.frameworkPolicyEnabled = enabled; }
 
     public EnhancedJob(Job delegate, JobDataMap enhancedConfig,
                        AsyncTaskLogService asyncTaskLogService,
@@ -98,10 +101,15 @@ public class EnhancedJob implements InterruptableJob {
 
     @Override
     public void execute(JobExecutionContext context) throws JobExecutionException {
+        boolean finalInvocation = true;
         try { executeInternal(context); }
+        catch (JobExecutionException error) {
+            finalInvocation = !error.refireImmediately();
+            throw error;
+        }
         finally {
             if (alertEventPublisher != null) alertEventPublisher.clearExecutionCorrelation();
-            cleanup.run();
+            if (finalInvocation) cleanup.run();
         }
     }
 
@@ -122,6 +130,12 @@ public class EnhancedJob implements InterruptableJob {
             executionId = java.util.UUID.randomUUID().toString();
         }
         int scheduledAttempt = getIntConfig(runtimeData, CoQuartzConstants.RETRY_ATTEMPT, 1);
+        if (!frameworkPolicyEnabled) {
+            Object previousId = context.get("co-quartz.nativeExecutionId");
+            if (previousId instanceof String id) executionId = id;
+            else context.put("co-quartz.nativeExecutionId", executionId);
+            scheduledAttempt = context.getRefireCount() + 1;
+        }
 
         RetryContext retryContext = new RetryContext(retryTimes, retryInterval, exponentialBackoff, backoffMultiplier);
         Exception lastException = null;
@@ -176,7 +190,9 @@ public class EnhancedJob implements InterruptableJob {
 
                 boolean nativeStop = lastException instanceof JobExecutionException nativeError
                         && (nativeError.unscheduleAllTriggers() || nativeError.unscheduleFiringTrigger());
-                if (lastException instanceof JobExecutionException nativeError) nativeError.setRefireImmediately(false);
+                boolean nativeRefire = !frameworkPolicyEnabled && !nativeStop
+                        && lastException instanceof JobExecutionException nativeError && nativeError.refireImmediately();
+                if (frameworkPolicyEnabled && lastException instanceof JobExecutionException nativeError) nativeError.setRefireImmediately(false);
                 boolean noMoreRetries = attempt > retryTimes || nativeStop;
                 if (execState == LogTaskExecStateEnum.FAIL && !noMoreRetries) {
                     try {
@@ -197,7 +213,7 @@ public class EnhancedJob implements InterruptableJob {
                 if (execState == LogTaskExecStateEnum.SUCCESS) {
                     taskLog = TaskExecutionLog.success(jobKey, triggerKey, startTime, endTime, executionTimeMs, attempt, true);
                 } else {
-                    taskLog = TaskExecutionLog.failure(jobKey, triggerKey, startTime, endTime, executionTimeMs, errorMessage, stackTrace, attempt, noMoreRetries);
+                    taskLog = TaskExecutionLog.failure(jobKey, triggerKey, startTime, endTime, executionTimeMs, errorMessage, stackTrace, attempt, noMoreRetries && !nativeRefire);
                 }
                 populateExecutionCorrelation(taskLog, context, executionId);
                 if (alertEventPublisher != null) alertEventPublisher.setExecutionCorrelation(taskLog);
@@ -238,7 +254,7 @@ public class EnhancedJob implements InterruptableJob {
                                 terminationConfirmed);
                     }
 
-                    if (noMoreRetries) {
+                    if (noMoreRetries && !nativeRefire) {
                         alertEventPublisher.publishConsecutiveFailureIfNeeded(jobKey);
                     }
                 }

@@ -21,6 +21,48 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.*;
 
 class NativeAuditExecutionTest {
+    public static class RefiringNativeJob implements Job {
+        static final AtomicInteger executions = new AtomicInteger();
+        static final AtomicInteger destroyed = new AtomicInteger();
+        public void execute(JobExecutionContext context) throws JobExecutionException {
+            assertThat(destroyed).hasValue(0);
+            if (executions.incrementAndGet() == 1) throw new JobExecutionException("refire", true);
+        }
+        @jakarta.annotation.PreDestroy void destroy() { destroyed.incrementAndGet(); }
+    }
+
+    @org.junit.jupiter.api.Test
+    void nativeReliableAuditKeepsQuartzRefireAndDestroysOnlyAfterFinalInvocation() throws Exception {
+        RefiringNativeJob.executions.set(0); RefiringNativeJob.destroyed.set(0);
+        var audit = mock(ReliableAuditService.class);
+        var beans = new StaticListableBeanFactory(); beans.addBean("audit", audit);
+        var properties = new CoQuartzProperties(); properties.getLog().setReliableAudit(true);
+        var scheduler = new BuilderScheduleRegressionTest().scheduler();
+        try (var spring = new org.springframework.context.annotation.AnnotationConfigApplicationContext()) {
+            spring.refresh();
+            var factory = new CoQuartzJobFactory(); factory.setProperties(properties);
+            factory.setBeanFactory(spring.getAutowireCapableBeanFactory());
+            factory.setReliableAuditServiceProvider(beans.getBeanProvider(ReliableAuditService.class));
+            scheduler.setJobFactory(factory);
+            var completed = new CountDownLatch(2);
+            scheduler.getListenerManager().addJobListener(new JobListenerSupport() {
+                public String getName() { return "refire-completion"; }
+                public void jobWasExecuted(JobExecutionContext context, JobExecutionException error) { completed.countDown(); }
+            });
+            var detail = JobBuilder.newJob(RefiringNativeJob.class).withIdentity("refiring").build();
+            scheduler.scheduleJob(detail, TriggerBuilder.newTrigger().forJob(detail)
+                    .withSchedule(SimpleScheduleBuilder.repeatSecondlyForever(3600)).build());
+            scheduler.start();
+            assertThat(completed.await(3, TimeUnit.SECONDS)).isTrue();
+            assertThat(RefiringNativeJob.executions).hasValue(2);
+            assertThat(RefiringNativeJob.destroyed).hasValue(1);
+            var logs = org.mockito.ArgumentCaptor.forClass(io.github.cococzl.coquartz.dto.TaskExecutionLog.class);
+            verify(audit, times(2)).recordCompleted(logs.capture());
+            assertThat(logs.getAllValues()).extracting(io.github.cococzl.coquartz.dto.TaskExecutionLog::getAttempt).containsExactly(1, 2);
+            assertThat(logs.getAllValues()).extracting(io.github.cococzl.coquartz.dto.TaskExecutionLog::isFinalAttempt).containsExactly(false, true);
+            assertThat(logs.getAllValues().get(0).getExecutionId()).isEqualTo(logs.getAllValues().get(1).getExecutionId());
+        } finally { scheduler.shutdown(true); }
+    }
     @DisallowConcurrentExecution
     public static class NativeJob implements Job {
         static final AtomicInteger executions = new AtomicInteger();

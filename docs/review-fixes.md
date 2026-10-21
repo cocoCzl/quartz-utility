@@ -48,6 +48,8 @@ unschedule 优先且不安排重试；增强任务 refireImmediately 归一到�
 
 补充组合回归：超时失败后重试调度再失败，原实现在发布超时事件时将终态调度异常强转为 TaskTimeoutException，RED 1 failure。保留独立终止确认状态后 `./mvnw -q -Dmaven.repo.local=/usr/local/repo -pl co-quartz-core -Dtest=EnhancedJobTest test` 全部通过，终态异常与超时事件均保留。
 
+原生审计装饰组合补测：仅启用 reliable audit 的原生 Job 被误清除 refireImmediately，回归 RED 1 failure。区分审计装饰与框架策略，原生 refire 复用 executionId、递增 attempt；ManagedJob 与增强装饰器均延迟到最终调用才销毁。`./mvnw -q -Dmaven.repo.local=/usr/local/repo -pl co-quartz-core -Dtest=NativeAuditExecutionTest,EnhancedJobTest,JobSpringLifecycleTest test`：28 通过、0 失败/错误/跳过。框架增强任务仍将 refire 归入有限延迟重试。
+
 ## R07
 
 确认成立。真实 RAM 持久化更新与中断回归修复前 1 failure、1 error；`mvn -q -pl co-quartz-core -Dtest=QuartzNativeCapabilitiesTest,QuartzConcurrencyTest,QuartzJobReconciliationTest test`：18 通过。

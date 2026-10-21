@@ -16,8 +16,13 @@ final class ManagedJob implements InterruptableJob, AutoCloseable {
     }
     public void execute(JobExecutionContext context) throws JobExecutionException {
         worker = Thread.currentThread();
+        boolean finalInvocation = true;
         try { delegate.execute(context); }
-        finally { worker = null; close(); }
+        catch (JobExecutionException error) {
+            finalInvocation = !error.refireImmediately();
+            throw error;
+        }
+        finally { worker = null; if (finalInvocation) close(); }
     }
     public void interrupt() throws UnableToInterruptJobException {
         try { if (target instanceof InterruptableJob job) job.interrupt(); }
