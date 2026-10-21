@@ -71,6 +71,27 @@ class ContainerDatabaseLogIT {
         assertThat(repository.cleanup(30)).isGreaterThanOrEqualTo(1);
         assertThat(repository.pageLogs(new io.github.cococzl.coquartz.dto.TaskLogQuery()).getTotal()).isGreaterThan(0);
         async.shutdown();
+        // The baseline MySQL installation used second-precision timestamps. Do not require
+        // an implicit schema precision upgrade merely to replay an identical completion.
+        for (String column : java.util.List.of("start_time", "end_time", "execute_time")) {
+            if (dialect.equals("mysql")) jdbc.execute("ALTER TABLE quartz_task_log MODIFY COLUMN " + column
+                    + " DATETIME(0)" + (column.equals("end_time") ? "" : " NOT NULL"));
+            else jdbc.execute("ALTER TABLE quartz_task_log ALTER COLUMN " + column + " TYPE TIMESTAMP(0)");
+        }
+        var legacyRepository = new JdbcTaskLogRepository(jdbc);
+        TaskExecutionLog legacy = log("DEFAULT.legacyPrecision", LogTaskExecStateEnum.STARTED);
+        legacy.setStartTime(legacy.getStartTime().withNano(999_999_999));
+        legacy.setExecuteTime(legacy.getExecuteTime().withNano(999_999_999));
+        legacy.setEndTime(null);
+        legacyRepository.insert(legacy);
+        legacy.setExecState(LogTaskExecStateEnum.SUCCESS);
+        legacy.setEndTime(LocalDateTime.now().withNano(999_999_999));
+        legacyRepository.updateLifecycle(legacy);
+        legacyRepository.updateLifecycle(legacy);
+        assertThat(legacyRepository.insertBatch(java.util.List.of(legacy))).isEmpty();
+        legacy.setEndTime(legacy.getEndTime().plusSeconds(1));
+        org.assertj.core.api.Assertions.assertThatThrownBy(() -> legacyRepository.updateLifecycle(legacy))
+                .isInstanceOf(IllegalStateException.class).hasMessageContaining("conflict");
     }
 
     private static TaskExecutionLog log(String jobKey, LogTaskExecStateEnum state) {
