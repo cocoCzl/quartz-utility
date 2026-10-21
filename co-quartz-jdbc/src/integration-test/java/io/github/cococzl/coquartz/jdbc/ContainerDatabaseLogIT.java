@@ -32,6 +32,15 @@ class ContainerDatabaseLogIT {
         DriverManagerDataSource source = new DriverManagerDataSource(url, username, password);
         source.setDriverClassName(driver);
         JdbcTemplate jdbc = new JdbcTemplate(source);
+        String dialect = driver.contains("mysql") ? "mysql" : "postgresql";
+        try (var connection = source.getConnection()) {
+            for (String version : java.util.List.of("V1__initial.sql", "V2__execution_correlation.sql", "V3__audit_ownership.sql")) {
+                org.springframework.jdbc.datasource.init.ScriptUtils.executeSqlScript(connection,
+                        new org.springframework.core.io.ClassPathResource("db/migration/" + dialect + "/" + version));
+                if (version.startsWith("V1")) jdbc.execute("INSERT INTO quartz_task_log(id,job_key,trigger_key,start_time,exec_state,execute_time) VALUES ('legacy','legacy','trigger',CURRENT_TIMESTAMP,1,CURRENT_TIMESTAMP)");
+            }
+        } catch (java.sql.SQLException e) { throw new IllegalStateException(e); }
+        assertThat(jdbc.queryForObject("SELECT attempt FROM quartz_task_log WHERE id='legacy'", Integer.class)).isEqualTo(1);
         CoQuartzProperties properties = new CoQuartzProperties();
         properties.getLog().setAutoCreateTable(true);
         new SchemaInitializer(jdbc, properties).initialize();
@@ -44,6 +53,7 @@ class ContainerDatabaseLogIT {
         audit.setEndTime(null); audit.setExecutionTimeMs(null); repository.insert(audit);
         audit.setExecState(LogTaskExecStateEnum.SUCCESS); audit.setEndTime(LocalDateTime.now()); audit.setExecutionTimeMs(1L);
         repository.updateLifecycle(audit);
+        repository.updateLifecycle(audit); // Includes nullable legacy identity and idempotent completion.
         assertThat(repository.latestLogs(audit.getJobKey(), 1).get(0).getExecState()).isEqualTo(LogTaskExecStateEnum.SUCCESS);
         TaskExecutionLog old = log("DEFAULT.containerCleanup", LogTaskExecStateEnum.SUCCESS);
         old.setExecuteTime(LocalDateTime.now().minusDays(40)); repository.insert(old);

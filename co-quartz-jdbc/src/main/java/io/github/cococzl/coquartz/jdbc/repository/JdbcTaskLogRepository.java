@@ -155,7 +155,8 @@ public class JdbcTaskLogRepository implements TaskLogRepository {
         int affected = jdbcTemplate.update(UPDATE_LIFECYCLE_SQL, log.getEndTime(), log.getExecutionTimeMs(),
                 log.getExecState().getCode(), log.getErrorMessage(), log.getStackTrace(), log.isFinalAttempt(),
                 log.getId(), LogTaskExecStateEnum.STARTED.getCode(), log.getJobKey(), log.getAttempt(),
-                log.getExecutionId(), log.getExecutionId(), log.getFireInstanceId(), log.getFireInstanceId());
+                log.getExecutionId(), new org.springframework.jdbc.core.SqlParameterValue(java.sql.Types.VARCHAR, log.getExecutionId()),
+                log.getFireInstanceId(), new org.springframework.jdbc.core.SqlParameterValue(java.sql.Types.VARCHAR, log.getFireInstanceId()));
         if (affected != 1) assertSameCompletion(lifecycleRecord(log.getId()), log);
     }
 

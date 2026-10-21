@@ -70,6 +70,8 @@ unschedule 优先且不安排重试；增强任务 refireImmediately 归一到�
 
 完成先核对执行身份，STARTED 条件更新同时限定 executionId/fireInstanceId/jobKey/attempt；更新零行重新读取，仅同身份、同状态/结果/耗时/终态标记才接受幂等，否则明确报 missing/identity/conflict。未吞数据库异常。可靠审计缺少服务在启动时失败，直接构造增强层也不再静默退化。完成失败异常保留业务结果、executionId、attempt，不重跑已成功业务。修复 retry STARTED 与完成日志都复用原始 Trigger 身份。
 
+补充真实 PostgreSQL 16 验证：nullable identity 条件 UPDATE 的独立 `? IS NULL` 参数在驱动端无类型，原用例 RED 1 error（could not determine data type of parameter $12）。改为 JDBC VARCHAR 类型绑定；`TESTCONTAINERS_RYUK_DISABLED=true ./mvnw -q -Dmaven.repo.local=/usr/local/repo -pl co-quartz-jdbc -am -Pintegration-tests -Dtest=JdbcTaskLogRepositoryTest -Dsurefire.failIfNoSpecifiedTests=false -Dit.test=ContainerDatabaseLogIT verify` 通过，覆盖 MySQL 8.4/PostgreSQL 16 的 V1→V3 带旧数据升级、异步写入、空身份审计完成及幂等、查询与清理。本地禁用 Ryuk 仅因辅助镜像仓库不可达，数据库容器实际运行且由测试关闭。
+
 ## R10
 
 确认成立。新增结构化/传输凭据及基础设施异常日志回归，修复前 11 项中 8 failures。修复后 `mvn -q -pl co-quartz-core -Dtest=DefaultLogSanitizerTest,EnhancedJobTest,AlertEventPublisherTest,CoQuartzJobListenerTest test` 通过。
