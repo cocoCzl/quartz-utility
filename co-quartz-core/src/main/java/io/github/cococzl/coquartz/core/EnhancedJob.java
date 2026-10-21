@@ -144,6 +144,7 @@ public class EnhancedJob implements InterruptableJob {
                 String errorMessage = null;
                 String stackTrace = null;
                 boolean timedOut = false;
+                boolean terminationConfirmed = false;
 
                 try {
                     if (timeoutMs > 0) {
@@ -155,6 +156,7 @@ public class EnhancedJob implements InterruptableJob {
                 } catch (JobExecutionException e) {
                     if (e instanceof TaskTimeoutException) {
                         timedOut = true;
+                        terminationConfirmed = ((TaskTimeoutException) e).isTerminationConfirmed();
                     }
                     execState = LogTaskExecStateEnum.FAIL;
                     errorMessage = sanitize(e.getMessage(), 500);
@@ -233,7 +235,7 @@ public class EnhancedJob implements InterruptableJob {
 
                     if (timedOut) {
                         alertEventPublisher.publishTimeout(jobKey, timeoutMs,
-                                ((TaskTimeoutException) lastException).isTerminationConfirmed());
+                                terminationConfirmed);
                     }
 
                     if (noMoreRetries) {

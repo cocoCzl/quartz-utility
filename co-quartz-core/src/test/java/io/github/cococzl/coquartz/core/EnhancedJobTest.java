@@ -80,6 +80,17 @@ class EnhancedJobTest {
     }
 
     @Test
+    void timeoutRetrySchedulingFailureStillPublishesTimeoutAndThrowsTerminalQuartzError() throws Exception {
+        enhancedConfig.put(CoQuartzConstants.RETRY_TIMES, 1);
+        doThrow(new TaskTimeoutException(10, true)).when(delegate).execute(context);
+        when(scheduler.scheduleJob(any(Trigger.class))).thenThrow(new SchedulerException("store unavailable"));
+        assertThatThrownBy(() -> createEnhancedJob().execute(context))
+                .isInstanceOf(JobExecutionException.class).hasMessage("Failed to schedule delayed retry");
+        verify(alertEventPublisher).publishTimeout("DEFAULT.testJob", 0, true);
+        verify(asyncTaskLogService).write(argThat(log -> log.isFinalAttempt()));
+    }
+
+    @Test
     void execute_success_logsAndReturns() throws Exception {
         enhancedConfig.put(CoQuartzConstants.RETRY_TIMES, 0);
         EnhancedJob job = createEnhancedJob();

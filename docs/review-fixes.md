@@ -46,6 +46,8 @@ CoQuartzJobFactory 在 reliable-audit 模式下也装饰原生 Job。开始失�
 
 unschedule 优先且不安排重试；增强任务 refireImmediately 归一到框架有限重试，不保留原生立即循环；普通原生未增强任务维持 Quartz 行为。调度重试先于结果持久化，调度失败记录最终失败和独立诊断，保留业务异常作为 suppressed，不再写虚假的非终态。调度与日志数据库不是同一事务，不承诺 exactly-once。
 
+补充组合回归：超时失败后重试调度再失败，原实现在发布超时事件时将终态调度异常强转为 TaskTimeoutException，RED 1 failure。保留独立终止确认状态后 `./mvnw -q -Dmaven.repo.local=/usr/local/repo -pl co-quartz-core -Dtest=EnhancedJobTest test` 全部通过，终态异常与超时事件均保留。
+
 ## R07
 
 确认成立。真实 RAM 持久化更新与中断回归修复前 1 failure、1 error；`mvn -q -pl co-quartz-core -Dtest=QuartzNativeCapabilitiesTest,QuartzConcurrencyTest,QuartzJobReconciliationTest test`：18 通过。
