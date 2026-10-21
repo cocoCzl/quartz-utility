@@ -40,9 +40,3 @@ logs/
 ### Maven settings ###
 temp-settings.xml
 settings.xml
-
-### Local AI review records ###
-/docs/review-fixes.md
-/docs/review-acceptance.md
-/docs/review-acceptance-results.json
-/quartz-utility-review-codex.md
