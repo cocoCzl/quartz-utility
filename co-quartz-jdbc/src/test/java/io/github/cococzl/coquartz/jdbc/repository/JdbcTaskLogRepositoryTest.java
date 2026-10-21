@@ -132,6 +132,42 @@ class JdbcTaskLogRepositoryTest {
         assertThat(repository.findStartedBefore(LocalDateTime.now())).hasSize(1);
     }
 
+    @org.junit.jupiter.params.ParameterizedTest
+    @org.junit.jupiter.params.provider.ValueSource(strings = {"start", "end", "execute", "originTrigger", "originTime"})
+    void duplicateCompletionRejectsChangedTimestampsAndOrigin(String field) {
+        var completed = createLog("audit", LogTaskExecStateEnum.SUCCESS, 1, true);
+        completed.setOriginTriggerKey("DEFAULT.initial");
+        completed.setOriginScheduledTime(1000L);
+        repository.insert(completed);
+        switch (field) {
+            case "start" -> completed.setStartTime(completed.getStartTime().plusDays(1));
+            case "end" -> completed.setEndTime(completed.getEndTime().plusDays(1));
+            case "execute" -> completed.setExecuteTime(completed.getExecuteTime().plusDays(1));
+            case "originTrigger" -> completed.setOriginTriggerKey("DEFAULT.other");
+            case "originTime" -> completed.setOriginScheduledTime(2000L);
+            default -> throw new AssertionError(field);
+        }
+        assertThatThrownBy(() -> repository.updateLifecycle(completed)).isInstanceOf(IllegalStateException.class);
+        assertThat(repository.insertBatch(List.of(completed))).containsExactly(completed);
+    }
+
+    @Test
+    void identicalCompletionUsesLegacyTimestampColumnPrecision() {
+        for (String column : List.of("start_time", "end_time", "execute_time")) {
+            jdbcTemplate.execute("ALTER TABLE quartz_task_log ALTER COLUMN " + column + " TIMESTAMP(0)");
+        }
+        var completed = createLog("legacy-audit", LogTaskExecStateEnum.SUCCESS, 1, true);
+        completed.setStartTime(completed.getStartTime().withNano(999_999_999));
+        completed.setEndTime(completed.getEndTime().withNano(999_999_999));
+        completed.setExecuteTime(completed.getExecuteTime().withNano(999_999_999));
+        repository.insert(completed);
+        repository.updateLifecycle(completed);
+        assertThat(repository.insertBatch(List.of(completed))).isEmpty();
+        completed.setEndTime(completed.getEndTime().plusSeconds(1));
+        assertThatThrownBy(() -> repository.updateLifecycle(completed)).isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("conflict");
+    }
+
     @Test
     void cleanupKeepsStartedAuditRowsEvenWhenOlderThanRetention() {
         var started = createLog("long-running", LogTaskExecStateEnum.STARTED, 1, false);

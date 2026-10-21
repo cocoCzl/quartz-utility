@@ -54,6 +54,17 @@ class ContainerDatabaseLogIT {
         audit.setExecState(LogTaskExecStateEnum.SUCCESS); audit.setEndTime(LocalDateTime.now()); audit.setExecutionTimeMs(1L);
         repository.updateLifecycle(audit);
         repository.updateLifecycle(audit); // Includes nullable legacy identity and idempotent completion.
+        LocalDateTime originalEnd = audit.getEndTime();
+        audit.setEndTime(originalEnd.plusDays(1));
+        org.assertj.core.api.Assertions.assertThatThrownBy(() -> repository.updateLifecycle(audit))
+                .isInstanceOf(IllegalStateException.class).hasMessageContaining("conflict");
+        assertThat(repository.insertBatch(java.util.List.of(audit))).containsExactly(audit);
+        audit.setEndTime(originalEnd);
+        audit.setOriginTriggerKey("different-origin");
+        org.assertj.core.api.Assertions.assertThatThrownBy(() -> repository.updateLifecycle(audit))
+                .isInstanceOf(IllegalStateException.class).hasMessageContaining("identity");
+        audit.setOriginTriggerKey(null);
+        repository.updateLifecycle(audit);
         assertThat(repository.latestLogs(audit.getJobKey(), 1).get(0).getExecState()).isEqualTo(LogTaskExecStateEnum.SUCCESS);
         TaskExecutionLog old = log("DEFAULT.containerCleanup", LogTaskExecStateEnum.SUCCESS);
         old.setExecuteTime(LocalDateTime.now().minusDays(40)); repository.insert(old);

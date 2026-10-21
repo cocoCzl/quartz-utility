@@ -44,6 +44,7 @@ public class JdbcTaskLogRepository implements TaskLogRepository {
     private final JdbcTemplate jdbcTemplate;
 
     private String cachedDialect;
+    private volatile Map<String, String> timestampTypes;
 
     public JdbcTaskLogRepository(JdbcTemplate jdbcTemplate) {
         this.jdbcTemplate = jdbcTemplate;
@@ -175,6 +176,8 @@ public class JdbcTaskLogRepository implements TaskLogRepository {
                 && java.util.Objects.equals(first.getDefinitionVersion(), second.getDefinitionVersion())
                 && java.util.Objects.equals(first.getSchedulerName(), second.getSchedulerName())
                 && java.util.Objects.equals(first.getApplicationNamespace(), second.getApplicationNamespace())
+                && java.util.Objects.equals(first.getOriginTriggerKey(), second.getOriginTriggerKey())
+                && java.util.Objects.equals(first.getOriginScheduledTime(), second.getOriginScheduledTime())
                 && first.getAttempt() == second.getAttempt();
     }
 
@@ -183,8 +186,63 @@ public class JdbcTaskLogRepository implements TaskLogRepository {
                 || stored.isFinalAttempt() != desired.isFinalAttempt()
                 || !java.util.Objects.equals(stored.getExecutionTimeMs(), desired.getExecutionTimeMs())
                 || !java.util.Objects.equals(stored.getErrorMessage(), desired.getErrorMessage())
-                || !java.util.Objects.equals(stored.getStackTrace(), desired.getStackTrace())) {
+                || !java.util.Objects.equals(stored.getStackTrace(), desired.getStackTrace())
+                || !sameStoredTimestamps(stored, desired)) {
             throw new IllegalStateException("Audit terminal result conflict: " + desired.getId());
+        }
+    }
+
+    private boolean sameStoredTimestamps(TaskExecutionLog stored, TaskExecutionLog desired) {
+        Map<String, String> types = timestampTypes();
+        // Let the database apply its actual column precision, including legacy DATETIME(0).
+        // Comparing Java nanoseconds directly would reject an identical completion after JDBC rounding.
+        return Boolean.TRUE.equals(jdbcTemplate.queryForObject("SELECT CAST(? AS " + types.get("start_time")
+                        + "), CAST(? AS " + types.get("end_time") + "), CAST(? AS " + types.get("execute_time") + ")",
+                (rs, row) -> java.util.Objects.equals(rs.getObject(1, LocalDateTime.class), stored.getStartTime())
+                        && java.util.Objects.equals(rs.getObject(2, LocalDateTime.class), stored.getEndTime())
+                        && java.util.Objects.equals(rs.getObject(3, LocalDateTime.class), stored.getExecuteTime()),
+                desired.getStartTime(), desired.getEndTime(), desired.getExecuteTime()));
+    }
+
+    private Map<String, String> timestampTypes() {
+        Map<String, String> cached = timestampTypes;
+        if (cached != null) return cached;
+        try (var connection = jdbcTemplate.getDataSource().getConnection()) {
+            var metadata = connection.getMetaData();
+            boolean mysql = metadata.getDatabaseProductName().toLowerCase(java.util.Locale.ROOT).contains("mysql");
+            String type = mysql ? "DATETIME" : "TIMESTAMP";
+            Map<String, String> found = new HashMap<>();
+            if (mysql) {
+                // Connector/J getColumns may report NULL DECIMAL_DIGITS for DATETIME.
+                try (var statement = connection.prepareStatement("SELECT COLUMN_NAME, DATETIME_PRECISION FROM information_schema.COLUMNS "
+                        + "WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='quartz_task_log' "
+                        + "AND COLUMN_NAME IN ('start_time','end_time','execute_time')"); var columns = statement.executeQuery()) {
+                    while (columns.next()) {
+                        int precision = columns.getInt(2);
+                        if (columns.wasNull() || precision < 0 || precision > 6) throw new IllegalStateException("Invalid audit timestamp precision");
+                        found.put(columns.getString(1).toLowerCase(java.util.Locale.ROOT), type + "(" + precision + ")");
+                    }
+                }
+            }
+            for (String table : mysql ? List.<String>of() : List.of("quartz_task_log", "QUARTZ_TASK_LOG")) {
+                try (var columns = metadata.getColumns(connection.getCatalog(), connection.getSchema(), table, null)) {
+                    while (columns.next()) {
+                        String name = columns.getString("COLUMN_NAME").toLowerCase(java.util.Locale.ROOT);
+                        if (!List.of("start_time", "end_time", "execute_time").contains(name)) continue;
+                        int precision = columns.getInt("DECIMAL_DIGITS");
+                        if (columns.wasNull() || precision < 0 || precision > 9) {
+                            throw new IllegalStateException("Cannot determine audit timestamp precision: " + name);
+                        }
+                        found.put(name, type + "(" + precision + ")");
+                    }
+                }
+                if (found.size() == 3) break;
+            }
+            if (found.size() != 3) throw new IllegalStateException("Audit timestamp columns missing");
+            timestampTypes = Map.copyOf(found);
+            return timestampTypes;
+        } catch (java.sql.SQLException failure) {
+            throw new IllegalStateException("Cannot inspect audit timestamp precision", failure);
         }
     }
 
