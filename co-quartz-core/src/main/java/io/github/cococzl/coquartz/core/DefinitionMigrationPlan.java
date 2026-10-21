@@ -28,6 +28,9 @@ public record DefinitionMigrationPlan(String applicationNamespace, Set<JobKey> r
     /** Requires all cluster nodes stopped/standby and a single migration owner, as documented. */
     public List<JobKey> apply(Scheduler scheduler) throws SchedulerException {
         if (!scheduler.isInStandbyMode()) throw new CoQuartzConfigurationException("Migration requires scheduler standby");
+        if (!scheduler.getCurrentlyExecutingJobs().isEmpty()) {
+            throw new CoQuartzConfigurationException("Migration requires local executions to drain after standby");
+        }
         List<JobKey> found = preview(scheduler);
         for (JobKey key : found) scheduler.deleteJob(key);
         return found;

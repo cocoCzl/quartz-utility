@@ -383,6 +383,58 @@ class QuartzJobReconciliationTest {
         assertThat(plan.apply(scheduler)).isEmpty();
     }
 
+    @org.junit.jupiter.params.ParameterizedTest
+    @org.junit.jupiter.params.provider.ValueSource(booleans = {false, true})
+    void standbyWithRunningWorkRejectsReconciliationAndRetirement(boolean retire) throws Exception {
+        scheduler = newScheduler();
+        BlockingJob.started = new java.util.concurrent.CountDownLatch(1);
+        BlockingJob.release = new java.util.concurrent.CountDownLatch(1);
+        JobKey key = JobKey.jobKey("reconcileTask");
+        try (var initial = context("versionedTaskBean", InitialTaskBean.class);
+             var changed = context("versionedTaskBean", ChangedTaskBean.class)) {
+            processor(initial).registerJobs();
+            var plan = new DefinitionMigrationPlan("default", java.util.Set.of(key));
+            scheduler.scheduleJob(JobBuilder.newJob(BlockingJob.class).withIdentity("running").build(),
+                    TriggerBuilder.newTrigger().withIdentity("running").startNow().build());
+            scheduler.start();
+            try {
+                assertThat(BlockingJob.started.await(5, java.util.concurrent.TimeUnit.SECONDS)).isTrue();
+                scheduler.standby();
+                assertThat(scheduler.getCurrentlyExecutingJobs()).hasSize(1);
+                assertThatThrownBy(() -> {
+                    if (retire) plan.apply(scheduler);
+                    else processor(changed).registerJobs();
+                }).isInstanceOf(CoQuartzConfigurationException.class).hasMessageContaining("drain");
+                assertThat(((CronTrigger) scheduler.getTrigger(TriggerKey.triggerKey("TRIGGER_reconcileTask")))
+                        .getCronExpression()).isEqualTo("0 0 9 * * ?");
+            } finally {
+                BlockingJob.release.countDown();
+            }
+            long deadline = System.nanoTime() + java.util.concurrent.TimeUnit.SECONDS.toNanos(5);
+            while (!scheduler.getCurrentlyExecutingJobs().isEmpty() && System.nanoTime() < deadline) Thread.sleep(10);
+            assertThat(scheduler.getCurrentlyExecutingJobs()).isEmpty();
+            if (retire) assertThat(plan.apply(scheduler)).containsExactly(key);
+            else {
+                processor(changed).registerJobs();
+                assertThat(((CronTrigger) scheduler.getTrigger(TriggerKey.triggerKey("TRIGGER_reconcileTask")))
+                        .getCronExpression()).isEqualTo("0 0 10 * * ?");
+            }
+        }
+    }
+
+    public static class BlockingJob implements Job {
+        static java.util.concurrent.CountDownLatch started, release;
+        public void execute(JobExecutionContext context) {
+            started.countDown();
+            boolean interrupted = false;
+            while (release.getCount() > 0) {
+                try { release.await(); }
+                catch (InterruptedException ignored) { interrupted = true; }
+            }
+            if (interrupted) Thread.currentThread().interrupt();
+        }
+    }
+
     @Test
     void asyncMethodTasksFailFastInsteadOfRecordingEarlySuccess() throws Exception {
         scheduler = newScheduler();

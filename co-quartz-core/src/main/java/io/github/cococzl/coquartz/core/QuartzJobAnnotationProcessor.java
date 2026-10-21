@@ -83,6 +83,9 @@ public class QuartzJobAnnotationProcessor implements SmartInitializingSingleton 
             if (coQuartzScheduler.getScheduler().isStarted() && !coQuartzScheduler.getScheduler().isInStandbyMode()) {
                 throw new CoQuartzConfigurationException("Definition reconciliation requires scheduler standby; live rescanning is unsupported");
             }
+            if (!coQuartzScheduler.getScheduler().getCurrentlyExecutingJobs().isEmpty()) {
+                throw new CoQuartzConfigurationException("Definition reconciliation requires local executions to drain after standby");
+            }
         } catch (SchedulerException failure) {
             throw new CoQuartzSchedulingException("Cannot verify reconciliation standby", failure);
         }
