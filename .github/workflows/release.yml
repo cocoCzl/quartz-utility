@@ -13,12 +13,6 @@ jobs:
     environment: maven-central
     steps:
       - uses: actions/checkout@v4
-      - name: Verify release version
-        shell: bash
-        run: |
-          version=$(mvn help:evaluate -Dexpression=project.version -q -DforceStdout)
-          test "$version" = "${GITHUB_REF_NAME#v}"
-          test "${version#*-SNAPSHOT}" = "$version"
       - uses: actions/setup-java@v4
         with:
           distribution: temurin
@@ -29,7 +23,13 @@ jobs:
           server-password: CENTRAL_TOKEN
           gpg-private-key: ${{ secrets.GPG_PRIVATE_KEY }}
           gpg-passphrase: GPG_PASSPHRASE
-      - run: mvn -B deploy -Prelease
+      - name: Verify release version
+        shell: bash
+        run: |
+          version=$(./mvnw help:evaluate -Dexpression=project.version -q -DforceStdout)
+          test "$version" = "${GITHUB_REF_NAME#v}"
+          test "${version#*-SNAPSHOT}" = "$version"
+      - run: ./mvnw -B deploy -Prelease
         env:
           CENTRAL_USERNAME: ${{ secrets.CENTRAL_USERNAME }}
           CENTRAL_TOKEN: ${{ secrets.CENTRAL_TOKEN }}

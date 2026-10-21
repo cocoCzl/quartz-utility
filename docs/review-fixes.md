@@ -16,7 +16,7 @@
 
 业务直接运行于 Quartz 工作线程；独立 daemon 定时器仅请求中断，直到业务真正退出前 execute 不返回，不释放 JobStore 非并发约束，也不安排重试。增加未确认终止活动数与中断请求计数。正常异常不再跨 Future 包装；关闭中断直接到达业务线程。超时完成事件在确认业务退出后报告。代价：永久忽略中断的业务可能永久占用 Quartz 工作线程，shutdown(wait=true) 同样等待；不能强制终止。timeoutExecutor 旧构造参数暂保留兼容，业务不再提交给它。
 
-未验证：共享 JDBC 多节点超时时序与关闭竞争；不以 JVM 锁宣称集群保证，非并发仍由 Quartz JobStore 持有。
+后续 R20 已在 MySQL 8.4 两个独立 Scheduler/共享 JobStore 验证正常与超时忽略中断均不重叠。跨节点关闭/网络分区/故障转移竞争仍未验证；不以 JVM 锁宣称集群保证。
 
 ## R03
 
@@ -24,7 +24,7 @@
 
 CoQuartzJobFactory 在 reliable-audit 模式下也装饰原生 Job。开始失败不执行业务；完成失败作为 JobExecutionException 返回，绝不自动重跑已成功业务。Listener 不写可靠审计、不抛异常控制执行，且增强判断统一解析 true，enhanced=false 不再被跳过。未采用该工厂的自定义 Scheduler 不在可靠审计支持范围，启动校验在后续生命周期项处理。
 
-未验证：真实 JDBC 审计数据库断连、外部自定义 JobFactory。RAM 已验证 Quartz 正常清理并将周期 Trigger 恢复 NORMAL。
+R20 补真实 H2 SQL 故障：开始前/业务结束前删除审计表，确认业务执行边界、NORMAL 状态及修复表后下一次成功。物理网络断连与外部自定义 JobFactory 仍未验证。
 
 ## R04
 
@@ -56,7 +56,7 @@ unschedule 优先且不安排重试；增强任务 refireImmediately 归一到�
 
 只为声明 @PersistJobDataAfterExecution 的非并发业务选择 PersistentNonConcurrentJobWrapper，未给全部 wrapper 加持久化。EnhancedJob 实现 InterruptableJob，向业务接口委托并请求实际工作线程中断。原生 DisallowConcurrentExecution 优先于 concurrent=true，README 加入兼容表。测试验证下一次执行读取到递增 JobDataMap、业务真正收到接口中断信号。
 
-未验证：此持久化组合跨 JDBC 重启、Quartz 集群中断（Quartz interrupt 本身是节点本地操作）。
+R20 补 H2 JobDataMap 跨 Scheduler 重启继续递增验证。Quartz 集群中断未验证；Quartz interrupt 本身是节点本地操作。
 
 ## R08
 
@@ -64,7 +64,7 @@ unschedule 优先且不安排重试；增强任务 refireImmediately 归一到�
 
 统一构造器自动装配、字段装配、三层数据绑定、initializeBean，保留 BPP 生成的代理；每次执行独立实例，ManagedJob 幂等销毁目标，开始审计失败也释放实例。真实 Spring Context 验证 setter 在 PostConstruct 前生效、代理拦截执行、两次实例隔离、PreDestroy 各执行一次。原来只验证 mock autowireBean 调用的测试改为实例隔离行为断言。
 
-边界：自定义 JobFactory/自定义 Scheduler 必须主动采用本工厂；自动检测任意第三方 Scheduler 实际安装的 JobFactory 无公共 Quartz 查询 API，尚未实现通用启动校验；QuartzJobBean 与事务代理组合需后续集成补测。不声称仅凭装配调用保证所有第三方代理语义。
+边界：自定义 JobFactory/自定义 Scheduler 必须主动采用本工厂；自动检测任意第三方 Scheduler 实际安装的 JobFactory 无公共 Quartz 查询 API，尚未实现通用启动校验；R20 已补 QuartzJobBean 构造注入事务 service、绑定、PostConstruct/PreDestroy，且覆盖并发/非并发。QuartzJobBean 的继承 final execute 不因子类类级 Transactional 自动获得事务，应调用注入 service 或使用方法任务。不声称仅凭装配调用保证所有第三方代理语义。
 
 ## R09
 
@@ -114,7 +114,7 @@ fingerprint v2 加入 beanName/methodName 并存储绑定元数据、应用 name
 
 内部清理定义协调更新/禁用删除，额外自动配置在日志关闭时仍执行移除；冲突身份拒绝覆盖。执行时间 UTC、耗时 nanoTime，终态每次限 1000 条、STARTED 不删，增加索引及清理非并发标记。旧非 UTC 历史记录需按旧部署时区离线迁移，不能猜测历史时区自动改写。
 
-未验证：真实数据库大表锁/IO 压测、非 UTC 历史迁移；禁用迁移自动配置仍待最终 Boot 全量验证。
+未验证：真实数据库大表锁/IO 压测、非 UTC 历史迁移；R20 补 Boot 配置层禁用日志删除已有清理任务验证。
 
 ## R16
 
@@ -126,7 +126,7 @@ fingerprint v2 加入 beanName/methodName 并存储绑定元数据、应用 name
 
 确认参数校验和 Async 组合问题；新增策略/Async 回归修复前失败，useProperties 原先只产生 Quartz 不可读配置错误，现由工厂 Customizer 先给明确拒绝原因。`mvn -q -pl co-quartz-core -Dtest=TaskPolicyValidationTest,QuartzJobReconciliationTest,QuartzJobAnnotationProcessorTest,QuartzTaskBuilderTest,RetryContextTest,CoQuartzAutoConfigurationTest test`：64 通过。
 
-共享验证器限制负数、NaN/Infinity、次数和延迟上界，首退避也受边界约束；Builder 持久数据类型/大小/保留键验证。拒绝 Async 和 Boot useProperties=true，namespace 长度校验。占位符/Profile 扩展属于报告第三批未承诺功能，未伪装成回归实现；专用 DataSource/JobFactory 完整 Boot 组合在最终 E2E 检查，不声称所有第三方配置已兼容。
+共享验证器限制负数、NaN/Infinity、次数和延迟上界，首退避也受边界约束；Builder 持久数据类型/大小/保留键验证。拒绝 Async 和 Boot useProperties=true，namespace 长度校验。占位符/Profile 扩展属于报告第三批未承诺功能，未伪装成回归实现；R20 补 Boot 官方 Quartz 自动配置 + Primary 业务库/@QuartzDataSource/独立日志库隔离，以及显式同名 JobFactory Customizer 优先级验证。不声称任意第三方工厂可执行 framework wrapper；外部自建 Scheduler 必须避免另建 Boot Scheduler。
 
 ## R18
 
@@ -141,3 +141,429 @@ README 明确单迁移者、非幂等脚本、部分失败恢复、Flyway/Liquib
 标签同步准入；原生观察路径增加 active 成对计数、连续失败和慢任务事件；审计指标独立后台刷新、缓存/失败计数/样本年龄，不在 scrape 访问数据库。告警关联跨异步 dispatch 保留并清理 ThreadLocal，补节点/attempt/finalAttempt。自动配置绑定告警丢弃和合并 gauge。文档明确尝试计数、节点本地连续失败完成顺序以及非集群聚合。
 
 未验证：真实网络故障/无限 JDBC 驱动挂起；采样线程 daemon 且 close 请求取消，不强制终止第三方驱动。
+
+## R20
+
+确认构建/覆盖缺口成立。构建约束回归修复前 3 failures、1 error，补充根 URL/发布 Wrapper 回归修复前 2 failures；现在 `python3 scripts/check_build_contract.py`：6 通过。父 POM 统一 Surefire/Failsafe 3.5.4，官方 Maven Wrapper 固定 3.9.9（已实际运行），starter 使用 subclass MockMaker。CI 使用 Wrapper、Java 17/21 × Boot 3.3.7/3.3.13，并提供 MySQL 8.4 根 URL 强制运行集群用例、输出执行/通过/失败/错误/跳过数。发布流程同样使用 Wrapper，先配置 Java，再验证 tag/POM 与非 SNAPSHOT 版本；本次不发布、不修改版本、不推送。
+
+集群测试新增身份断言 RED 1 failure，证明旧测试取回同一 JVM 注册表中的 Scheduler。现在使用独立 Scheduler 对象和相同共享 JobStore，正常/30ms 超时忽略中断两组均无业务重叠；加上原有跨 JVM 注册、定义更新、暂停保留与缺失恢复，启用后共 6 项。该验证不能证明混合版本 live 更新安全，仍要求所有节点 standby/停止、单写者。
+
+新增组合覆盖：H2 JobDataMap 跨重启、QuartzJobBean 注入事务 service/初始化/销毁、真实 H2 审计表故障与后续触发、Boot 三数据源隔离/显式同名 JobFactory Customizer/禁用日志清理迁移。MySQL 8.4/PostgreSQL 16 容器还实际执行 V1→V3 带旧数据升级、生命周期与查询清理。组合测试发现并补修 R06 超时+调度失败、原生审计+refire，以及 R09 PostgreSQL 类型绑定，分别独立提交。
+
+本机 Docker Hub 的 Ryuk 辅助镜像下载失败，不计产品错误。后续本地集成命令使用 `TESTCONTAINERS_RYUK_DISABLED=true` 和已缓存的真实数据库镜像，数据库容器仍由测试启动和关闭；CI 保持默认 Ryuk。首次 Wrapper 使用本机缓存需要 `-Dmaven.repo.local=/usr/local/repo`，这是机器配置，不要求其他环境采用该路径。
+
+未验证边界：Windows mvnw.cmd 执行、网络分区、真实驱动永久挂起、故障转移/恢复的全部竞争时序、大表压力；所有第三方 JobFactory、事务代理和自定义 Scheduler 组合。集群运行全景、占位符/Profile 新能力与其他第三批扩展不在此次交付。
+
+## 最终 clean 验证结果
+
+本地实际运行的是以下两个组合；CI 配置四种 Java/Boot 组合，另外两种未在本机重跑。测试中的故意业务异常/SQL 故障不是测试失败。
+
+| 环境/范围 | 执行 | 通过 | 失败 | 错误 | 跳过 |
+|---|---:|---:|---:|---:|---:|
+| Java 17 / Boot 3.3.13，core | 202 | 202 | 0 | 0 | 5 |
+| 同环境，JDBC | 47 | 47 | 0 | 0 | 0 |
+| 同环境，starter | 11 | 11 | 0 | 0 | 0 |
+| Java 21 / Boot 3.3.7 + 真实数据库，co-quartz-core | 208 | 208 | 0 | 0 | 0 |
+| Java 21 / Boot 3.3.7 + 真实数据库，co-quartz-jdbc | 51 | 51 | 0 | 0 | 0 |
+| Java 21 / Boot 3.3.7 + 真实数据库，co-quartz-starter | 11 | 11 | 0 | 0 | 0 |
+| Python 构建约束检查 | 6 | 6 | 0 | 0 | 0 |
+
+Java 17 合计 260 通过、5 跳过；Java 21 合计 270 通过、0 跳过。默认未启用集群时 JUnit 发现 5 个跳过条目；启用参数化用例后实际执行 6 个集群场景。两次构建组间用例重叠，不能相加视为独立用例数。
+
+```bash
+JAVA_HOME=/Library/Java/JavaVirtualMachines/jdk-17.jdk/Contents/Home \
+  ./mvnw -q -Dmaven.repo.local=/usr/local/repo -Dspring.boot.version=3.3.13 clean verify
+
+TESTCONTAINERS_RYUK_DISABLED=true ./mvnw -q -Dmaven.repo.local=/usr/local/repo \
+  clean verify -Pintegration-tests \
+  -Dco.quartz.test.mysql.url=jdbc:mysql://127.0.0.1:13306/ \
+  -Dco.quartz.test.mysql.user=root -Dco.quartz.test.mysql.password=quartz-test \
+  -Dco.quartz.test.postgresql.url=jdbc:postgresql://127.0.0.1:13307/postgres \
+  -Dco.quartz.test.postgresql.user=postgres -Dco.quartz.test.postgresql.password=quartz-test
+python3 scripts/check_build_contract.py
+python3 scripts/check_test_reports.py --require-cluster
+```
+
+Java 路径与 Maven 缓存参数仅为本机实测命令。两个外部数据库均为本次创建的临时容器，验证后已停止/删除；Testcontainers 创建的数据库容器也已关闭。未操作其他容器。
+
+### 逐项关联回归组
+
+以下数字来自最终 Java 21 clean XML，均为执行/通过数量，失败/错误/跳过均为 0；组间重叠不能相加。各项是否成立、目标行为、RED 证据和边界见上文。复现命令采用统一模板，避免重复长命令：
+
+```bash
+# T(类组)：使用表中逗号分隔的类名
+./mvnw -q -pl co-quartz-jdbc -am -Dtest=<类组> -Dsurefire.failIfNoSpecifiedTests=false test
+# I(类组)：从 -Dtest 中移除 ContainerDatabaseLogIT，由 Failsafe 单独运行它
+./mvnw -q -pl co-quartz-jdbc -am -Pintegration-tests \
+  -Dtest=<其余类组> -Dsurefire.failIfNoSpecifiedTests=false -Dit.test=ContainerDatabaseLogIT verify
+```
+
+包含 QuartzJdbcClusterReconciliationIT 的 T 命令还须补充上面 MySQL url/user/password。I 命令须 Docker；本机因 Ryuk 下载受阻使用同样环境变量。R20 使用完整 clean verify 命令，不用分组模板。
+
+| 编号 | 命令模板/类组 | 执行/通过 |
+|---|---|---:|
+| R01 | T(`QuartzJdbcRetryPersistenceTest,QuartzJobReconciliationTest`) | 20/20 |
+| R02 | T(`QuartzConcurrencyTest,EnhancedJobTest,QuartzJdbcRetryPersistenceTest,QuartzJdbcClusterReconciliationIT`) | 33/33 |
+| R03 | T(`NativeAuditExecutionTest,NativeJdbcAuditFailureTest,CoQuartzJobListenerTest,CoQuartzJobFactoryTest`) | 21/21 |
+| R04 | T(`BuilderScheduleRegressionTest,QuartzTaskBuilderTest,QuartzJdbcRetryPersistenceTest`) | 26/26 |
+| R05 | T(`BuilderScheduleRegressionTest,QuartzTaskBuilderTest,TaskAdminServiceTest,QuartzJobReconciliationTest`) | 43/43 |
+| R06 | T(`EnhancedJobTest,QuartzJdbcRetryPersistenceTest,NativeAuditExecutionTest`) | 27/27 |
+| R07 | T(`QuartzNativeCapabilitiesTest,QuartzConcurrencyTest,QuartzJobReconciliationTest,QuartzJdbcRetryPersistenceTest`) | 25/25 |
+| R08 | T(`JobSpringLifecycleTest,CoQuartzJobFactoryTest,QuartzNativeCapabilitiesTest,NativeAuditExecutionTest`) | 19/19 |
+| R09 | I(`JdbcTaskLogRepositoryTest,JdbcReliableAuditServiceTest,EnhancedJobTest,NativeAuditExecutionTest,CoQuartzAutoConfigurationTest,ContainerDatabaseLogIT`) | 50/50 |
+| R10 | T(`DefaultLogSanitizerTest,EnhancedJobTest,AlertEventPublisherTest,CoQuartzJobListenerTest`) | 45/45 |
+| R11 | T(`JdbcReliableAuditServiceTest,JdbcTaskLogRepositoryTest,SchemaInitializerTest,QuartzJdbcRetryPersistenceTest`) | 30/30 |
+| R12 | T(`JdbcAsyncTaskLogServiceTest,JdbcTaskLogRepositoryTest`) | 27/27 |
+| R13 | T(`AlertEventPublisherAsyncTest,AlertEventPublisherTest,JdbcReliableAuditServiceTest,CoQuartzAutoConfigurationTest`) | 19/19 |
+| R14 | T(`QuartzJobReconciliationTest,QuartzJobAnnotationProcessorTest,QuartzJdbcClusterReconciliationIT`) | 38/38 |
+| R15 | T(`LogCleanupRegistrarTest,JdbcTaskLogRepositoryTest,SchemaInitializerTest,BootQuartzConfigurationMatrixTest`) | 28/28 |
+| R16 | T(`TaskQueryServiceTest,JdbcTaskLogRepositoryTest`) | 19/19 |
+| R17 | T(`TaskPolicyValidationTest,QuartzJobReconciliationTest,QuartzJobAnnotationProcessorTest,QuartzTaskBuilderTest,RetryContextTest,CoQuartzAutoConfigurationTest,BootQuartzConfigurationMatrixTest`) | 67/67 |
+| R18 | I(`SchemaInitializerTest,ContainerDatabaseLogIT`) | 9/9 |
+| R19 | T(`CoQuartzMetricsTest,CoQuartzJobListenerTest,AlertEventPublisherTest,AlertEventPublisherAsyncTest,EnhancedJobTest`) | 42/42 |
+| R20 | 完整 clean verify + Python 约束检查 | 270/270 + 6/6 |
+
+## 修改文件与提交索引
+
+下列清单为各修复提交实际修改文件；README、CHANGELOG 与修复记录的最终整理由 R20 一并收尾。所有提交均仅在本地。
+
+<details><summary>R01（c69e660）完整文件</summary>
+
+```text
+co-quartz-core/src/main/java/io/github/cococzl/coquartz/core/CoQuartzConstants.java
+co-quartz-core/src/main/java/io/github/cococzl/coquartz/core/EnhancedJob.java
+co-quartz-core/src/main/java/io/github/cococzl/coquartz/core/InternalTriggers.java
+co-quartz-core/src/main/java/io/github/cococzl/coquartz/core/QuartzJobAnnotationProcessor.java
+co-quartz-core/src/test/java/io/github/cococzl/coquartz/core/QuartzJdbcRetryPersistenceTest.java
+docs/review-fixes.md
+```
+
+</details>
+
+<details><summary>R02（a3f5af8）完整文件</summary>
+
+```text
+co-quartz-core/src/main/java/io/github/cococzl/coquartz/core/EnhancedJob.java
+co-quartz-core/src/main/java/io/github/cococzl/coquartz/metrics/CoQuartzMetrics.java
+co-quartz-core/src/test/java/io/github/cococzl/coquartz/core/EnhancedJobTest.java
+co-quartz-core/src/test/java/io/github/cococzl/coquartz/core/QuartzConcurrencyTest.java
+docs/review-fixes.md
+```
+
+</details>
+
+<details><summary>R03（87caf21）完整文件</summary>
+
+```text
+co-quartz-core/src/main/java/io/github/cococzl/coquartz/core/CoQuartzJobFactory.java
+co-quartz-core/src/main/java/io/github/cococzl/coquartz/listener/CoQuartzJobListener.java
+co-quartz-core/src/test/java/io/github/cococzl/coquartz/core/NativeAuditExecutionTest.java
+docs/review-fixes.md
+```
+
+</details>
+
+<details><summary>R04（552051c）完整文件</summary>
+
+```text
+co-quartz-core/src/main/java/io/github/cococzl/coquartz/core/QuartzTaskBuilder.java
+co-quartz-core/src/test/java/io/github/cococzl/coquartz/core/BuilderScheduleRegressionTest.java
+co-quartz-core/src/test/java/io/github/cococzl/coquartz/core/QuartzJdbcRetryPersistenceTest.java
+co-quartz-core/src/test/java/io/github/cococzl/coquartz/core/QuartzTaskBuilderTest.java
+docs/review-fixes.md
+```
+
+</details>
+
+<details><summary>R05（d1a259f）完整文件</summary>
+
+```text
+co-quartz-core/src/main/java/io/github/cococzl/coquartz/core/CoQuartzScheduler.java
+co-quartz-core/src/main/java/io/github/cococzl/coquartz/core/QuartzTaskBuilder.java
+co-quartz-core/src/main/java/io/github/cococzl/coquartz/core/TaskIdentityPolicy.java
+co-quartz-core/src/main/java/io/github/cococzl/coquartz/service/TaskAdminService.java
+co-quartz-core/src/test/java/io/github/cococzl/coquartz/core/BuilderScheduleRegressionTest.java
+docs/review-fixes.md
+```
+
+</details>
+
+<details><summary>R06（79ce1aa 0237746 898979f）完整文件</summary>
+
+```text
+co-quartz-core/src/main/java/io/github/cococzl/coquartz/core/CoQuartzConstants.java
+co-quartz-core/src/main/java/io/github/cococzl/coquartz/core/CoQuartzJobFactory.java
+co-quartz-core/src/main/java/io/github/cococzl/coquartz/core/EnhancedJob.java
+co-quartz-core/src/main/java/io/github/cococzl/coquartz/core/ManagedJob.java
+co-quartz-core/src/main/java/io/github/cococzl/coquartz/core/RetryPayloadSnapshot.java
+co-quartz-core/src/test/java/io/github/cococzl/coquartz/core/EnhancedJobTest.java
+co-quartz-core/src/test/java/io/github/cococzl/coquartz/core/NativeAuditExecutionTest.java
+co-quartz-core/src/test/java/io/github/cococzl/coquartz/core/QuartzJdbcRetryPersistenceTest.java
+docs/review-fixes.md
+```
+
+</details>
+
+<details><summary>R07（7fea5f1）完整文件</summary>
+
+```text
+README.md
+co-quartz-core/src/main/java/io/github/cococzl/coquartz/core/EnhancedJob.java
+co-quartz-core/src/main/java/io/github/cococzl/coquartz/core/PersistentNonConcurrentJobWrapper.java
+co-quartz-core/src/main/java/io/github/cococzl/coquartz/core/QuartzJobAnnotationProcessor.java
+co-quartz-core/src/main/java/io/github/cococzl/coquartz/core/QuartzTaskBuilder.java
+co-quartz-core/src/test/java/io/github/cococzl/coquartz/core/QuartzNativeCapabilitiesTest.java
+docs/review-fixes.md
+```
+
+</details>
+
+<details><summary>R08（3736bae 898979f）完整文件</summary>
+
+```text
+README.md
+co-quartz-core/src/main/java/io/github/cococzl/coquartz/core/CoQuartzJobFactory.java
+co-quartz-core/src/main/java/io/github/cococzl/coquartz/core/EnhancedJob.java
+co-quartz-core/src/main/java/io/github/cococzl/coquartz/core/ManagedJob.java
+co-quartz-core/src/test/java/io/github/cococzl/coquartz/core/CoQuartzJobFactoryTest.java
+co-quartz-core/src/test/java/io/github/cococzl/coquartz/core/JobSpringLifecycleTest.java
+co-quartz-core/src/test/java/io/github/cococzl/coquartz/core/NativeAuditExecutionTest.java
+docs/review-fixes.md
+```
+
+</details>
+
+<details><summary>R09（eb3b7ba 65d6634）完整文件</summary>
+
+```text
+co-quartz-core/src/main/java/io/github/cococzl/coquartz/config/CoQuartzCoreAutoConfiguration.java
+co-quartz-core/src/main/java/io/github/cococzl/coquartz/core/EnhancedJob.java
+co-quartz-core/src/test/java/io/github/cococzl/coquartz/config/CoQuartzAutoConfigurationTest.java
+co-quartz-jdbc/src/integration-test/java/io/github/cococzl/coquartz/jdbc/ContainerDatabaseLogIT.java
+co-quartz-jdbc/src/main/java/io/github/cococzl/coquartz/jdbc/repository/JdbcTaskLogRepository.java
+co-quartz-jdbc/src/test/java/io/github/cococzl/coquartz/jdbc/repository/JdbcTaskLogRepositoryTest.java
+docs/review-fixes.md
+```
+
+</details>
+
+<details><summary>R10（7c044e2）完整文件</summary>
+
+```text
+README.md
+co-quartz-core/src/main/java/io/github/cococzl/coquartz/config/CoQuartzCoreAutoConfiguration.java
+co-quartz-core/src/main/java/io/github/cococzl/coquartz/core/EnhancedJob.java
+co-quartz-core/src/main/java/io/github/cococzl/coquartz/event/AlertEventPublisher.java
+co-quartz-core/src/main/java/io/github/cococzl/coquartz/listener/CoQuartzJobListener.java
+co-quartz-core/src/main/java/io/github/cococzl/coquartz/service/DefaultLogSanitizer.java
+co-quartz-core/src/test/java/io/github/cococzl/coquartz/core/EnhancedJobTest.java
+co-quartz-core/src/test/java/io/github/cococzl/coquartz/service/DefaultLogSanitizerTest.java
+co-quartz-jdbc/src/main/java/io/github/cococzl/coquartz/jdbc/job/LogCleanupJob.java
+co-quartz-jdbc/src/main/java/io/github/cococzl/coquartz/jdbc/job/LogCleanupRegistrar.java
+co-quartz-jdbc/src/main/java/io/github/cococzl/coquartz/jdbc/service/JdbcAsyncTaskLogService.java
+docs/review-fixes.md
+```
+
+</details>
+
+<details><summary>R11（401e23b）完整文件</summary>
+
+```text
+README.md
+co-quartz-core/src/main/java/io/github/cococzl/coquartz/config/CoQuartzProperties.java
+co-quartz-core/src/main/java/io/github/cococzl/coquartz/core/EnhancedJob.java
+co-quartz-core/src/main/java/io/github/cococzl/coquartz/dto/TaskExecutionLog.java
+co-quartz-core/src/main/java/io/github/cococzl/coquartz/listener/CoQuartzJobListener.java
+co-quartz-core/src/main/java/io/github/cococzl/coquartz/service/AuditRecoveryScope.java
+co-quartz-core/src/main/java/io/github/cococzl/coquartz/service/ReliableAuditService.java
+co-quartz-jdbc/src/main/java/io/github/cococzl/coquartz/jdbc/config/CoQuartzJdbcAutoConfiguration.java
+co-quartz-jdbc/src/main/java/io/github/cococzl/coquartz/jdbc/repository/JdbcTaskLogRepository.java
+co-quartz-jdbc/src/main/java/io/github/cococzl/coquartz/jdbc/schema/SchemaInitializer.java
+co-quartz-jdbc/src/main/java/io/github/cococzl/coquartz/jdbc/service/JdbcReliableAuditService.java
+co-quartz-jdbc/src/main/resources/db/migration/h2/V3__audit_ownership.sql
+co-quartz-jdbc/src/main/resources/db/migration/mysql/V3__audit_ownership.sql
+co-quartz-jdbc/src/main/resources/db/migration/postgresql/V3__audit_ownership.sql
+co-quartz-jdbc/src/main/resources/schema-quartz-task-log-h2.sql
+co-quartz-jdbc/src/main/resources/schema-quartz-task-log-mysql.sql
+co-quartz-jdbc/src/main/resources/schema-quartz-task-log-postgresql.sql
+co-quartz-jdbc/src/test/java/io/github/cococzl/coquartz/jdbc/schema/SchemaInitializerTest.java
+co-quartz-jdbc/src/test/java/io/github/cococzl/coquartz/jdbc/service/JdbcReliableAuditServiceTest.java
+docs/review-fixes.md
+```
+
+</details>
+
+<details><summary>R12（875cebd）完整文件</summary>
+
+```text
+README.md
+co-quartz-core/src/main/java/io/github/cococzl/coquartz/dto/AsyncLogPipelineStatus.java
+co-quartz-core/src/main/java/io/github/cococzl/coquartz/service/TaskLogRepository.java
+co-quartz-jdbc/src/main/java/io/github/cococzl/coquartz/jdbc/config/CoQuartzJdbcAutoConfiguration.java
+co-quartz-jdbc/src/main/java/io/github/cococzl/coquartz/jdbc/repository/JdbcTaskLogRepository.java
+co-quartz-jdbc/src/main/java/io/github/cococzl/coquartz/jdbc/service/JdbcAsyncTaskLogService.java
+co-quartz-jdbc/src/test/java/io/github/cococzl/coquartz/jdbc/repository/JdbcTaskLogRepositoryTest.java
+co-quartz-jdbc/src/test/java/io/github/cococzl/coquartz/jdbc/service/JdbcAsyncTaskLogServiceTest.java
+docs/review-fixes.md
+```
+
+</details>
+
+<details><summary>R13（c5b7f59）完整文件</summary>
+
+```text
+README.md
+co-quartz-core/src/main/java/io/github/cococzl/coquartz/config/CoQuartzCoreAutoConfiguration.java
+co-quartz-core/src/main/java/io/github/cococzl/coquartz/event/AlertEventPublisher.java
+co-quartz-core/src/test/java/io/github/cococzl/coquartz/event/AlertEventPublisherAsyncTest.java
+co-quartz-jdbc/src/main/java/io/github/cococzl/coquartz/jdbc/config/CoQuartzJdbcAutoConfiguration.java
+co-quartz-jdbc/src/main/java/io/github/cococzl/coquartz/jdbc/service/JdbcReliableAuditService.java
+docs/review-fixes.md
+```
+
+</details>
+
+<details><summary>R14（98914dd）完整文件</summary>
+
+```text
+README.md
+co-quartz-core/src/main/java/io/github/cococzl/coquartz/core/CoQuartzConstants.java
+co-quartz-core/src/main/java/io/github/cococzl/coquartz/core/DefinitionMigrationPlan.java
+co-quartz-core/src/main/java/io/github/cococzl/coquartz/core/QuartzDefinitionFingerprint.java
+co-quartz-core/src/main/java/io/github/cococzl/coquartz/core/QuartzJobAnnotationProcessor.java
+co-quartz-core/src/test/java/io/github/cococzl/coquartz/core/QuartzJobReconciliationTest.java
+docs/review-fixes.md
+```
+
+</details>
+
+<details><summary>R15（d250af5）完整文件</summary>
+
+```text
+README.md
+co-quartz-core/src/main/java/io/github/cococzl/coquartz/core/EnhancedJob.java
+co-quartz-core/src/main/java/io/github/cococzl/coquartz/listener/CoQuartzJobListener.java
+co-quartz-jdbc/src/main/java/io/github/cococzl/coquartz/jdbc/config/DisabledCleanupAutoConfiguration.java
+co-quartz-jdbc/src/main/java/io/github/cococzl/coquartz/jdbc/job/LogCleanupJob.java
+co-quartz-jdbc/src/main/java/io/github/cococzl/coquartz/jdbc/job/LogCleanupRegistrar.java
+co-quartz-jdbc/src/main/java/io/github/cococzl/coquartz/jdbc/repository/JdbcTaskLogRepository.java
+co-quartz-jdbc/src/main/java/io/github/cococzl/coquartz/jdbc/schema/SchemaInitializer.java
+co-quartz-jdbc/src/main/resources/META-INF/spring/org.springframework.boot.autoconfigure.AutoConfiguration.imports
+co-quartz-jdbc/src/main/resources/db/migration/h2/V3__audit_ownership.sql
+co-quartz-jdbc/src/main/resources/db/migration/mysql/V3__audit_ownership.sql
+co-quartz-jdbc/src/main/resources/db/migration/postgresql/V3__audit_ownership.sql
+co-quartz-jdbc/src/main/resources/schema-quartz-task-log-h2.sql
+co-quartz-jdbc/src/main/resources/schema-quartz-task-log-mysql.sql
+co-quartz-jdbc/src/main/resources/schema-quartz-task-log-postgresql.sql
+co-quartz-jdbc/src/test/java/io/github/cococzl/coquartz/jdbc/job/LogCleanupRegistrarTest.java
+co-quartz-jdbc/src/test/java/io/github/cococzl/coquartz/jdbc/repository/JdbcTaskLogRepositoryTest.java
+docs/review-fixes.md
+```
+
+</details>
+
+<details><summary>R16（19009ae）完整文件</summary>
+
+```text
+README.md
+co-quartz-core/src/main/java/io/github/cococzl/coquartz/actuator/CoQuartzEndpoint.java
+co-quartz-core/src/main/java/io/github/cococzl/coquartz/core/CoQuartzConstants.java
+co-quartz-core/src/main/java/io/github/cococzl/coquartz/core/QuartzJobAnnotationProcessor.java
+co-quartz-core/src/main/java/io/github/cococzl/coquartz/core/QuartzTaskBuilder.java
+co-quartz-core/src/main/java/io/github/cococzl/coquartz/dto/TaskInfo.java
+co-quartz-core/src/main/java/io/github/cococzl/coquartz/dto/TaskTriggerInfo.java
+co-quartz-core/src/main/java/io/github/cococzl/coquartz/service/TaskQueryService.java
+co-quartz-core/src/test/java/io/github/cococzl/coquartz/service/TaskQueryServiceTest.java
+co-quartz-jdbc/src/main/java/io/github/cococzl/coquartz/jdbc/repository/JdbcTaskLogRepository.java
+co-quartz-jdbc/src/test/java/io/github/cococzl/coquartz/jdbc/repository/JdbcTaskLogRepositoryTest.java
+docs/review-fixes.md
+```
+
+</details>
+
+<details><summary>R17（00b41ff）完整文件</summary>
+
+```text
+README.md
+co-quartz-core/src/main/java/io/github/cococzl/coquartz/config/CoQuartzCoreAutoConfiguration.java
+co-quartz-core/src/main/java/io/github/cococzl/coquartz/config/CoQuartzProperties.java
+co-quartz-core/src/main/java/io/github/cococzl/coquartz/core/QuartzJobAnnotationProcessor.java
+co-quartz-core/src/main/java/io/github/cococzl/coquartz/core/QuartzJobDefinition.java
+co-quartz-core/src/main/java/io/github/cococzl/coquartz/core/QuartzTaskBuilder.java
+co-quartz-core/src/main/java/io/github/cococzl/coquartz/core/RetryContext.java
+co-quartz-core/src/main/java/io/github/cococzl/coquartz/core/TaskPolicyValidator.java
+co-quartz-core/src/test/java/io/github/cococzl/coquartz/config/CoQuartzAutoConfigurationTest.java
+co-quartz-core/src/test/java/io/github/cococzl/coquartz/core/QuartzJobReconciliationTest.java
+co-quartz-core/src/test/java/io/github/cococzl/coquartz/core/TaskPolicyValidationTest.java
+docs/review-fixes.md
+```
+
+</details>
+
+<details><summary>R18（be552f0）完整文件</summary>
+
+```text
+README.md
+co-quartz-jdbc/src/main/java/io/github/cococzl/coquartz/jdbc/schema/SchemaInitializer.java
+co-quartz-jdbc/src/main/resources/db/migration/h2/V1__initial.sql
+co-quartz-jdbc/src/main/resources/db/migration/h2/V2__execution_correlation.sql
+co-quartz-jdbc/src/main/resources/db/migration/mysql/V1__initial.sql
+co-quartz-jdbc/src/main/resources/db/migration/mysql/V2__execution_correlation.sql
+co-quartz-jdbc/src/main/resources/db/migration/postgresql/V1__initial.sql
+co-quartz-jdbc/src/main/resources/db/migration/postgresql/V2__execution_correlation.sql
+co-quartz-jdbc/src/test/java/io/github/cococzl/coquartz/jdbc/schema/SchemaInitializerTest.java
+docs/review-fixes.md
+```
+
+</details>
+
+<details><summary>R19（38737b8）完整文件</summary>
+
+```text
+README.md
+co-quartz-core/src/main/java/io/github/cococzl/coquartz/config/CoQuartzCoreAutoConfiguration.java
+co-quartz-core/src/main/java/io/github/cococzl/coquartz/core/EnhancedJob.java
+co-quartz-core/src/main/java/io/github/cococzl/coquartz/event/AlertEventPublisher.java
+co-quartz-core/src/main/java/io/github/cococzl/coquartz/event/CorrelatedTaskEvent.java
+co-quartz-core/src/main/java/io/github/cococzl/coquartz/event/ReliableAuditFailureEvent.java
+co-quartz-core/src/main/java/io/github/cococzl/coquartz/event/TaskConsecutiveFailureEvent.java
+co-quartz-core/src/main/java/io/github/cococzl/coquartz/event/TaskExecutionCorrelation.java
+co-quartz-core/src/main/java/io/github/cococzl/coquartz/event/TaskFailureEvent.java
+co-quartz-core/src/main/java/io/github/cococzl/coquartz/event/TaskLogPipelineEvent.java
+co-quartz-core/src/main/java/io/github/cococzl/coquartz/event/TaskSlowEvent.java
+co-quartz-core/src/main/java/io/github/cococzl/coquartz/event/TaskTimeoutEvent.java
+co-quartz-core/src/main/java/io/github/cococzl/coquartz/listener/CoQuartzJobListener.java
+co-quartz-core/src/main/java/io/github/cococzl/coquartz/metrics/CoQuartzMetrics.java
+co-quartz-core/src/test/java/io/github/cococzl/coquartz/event/AlertEventPublisherAsyncTest.java
+co-quartz-core/src/test/java/io/github/cococzl/coquartz/metrics/CoQuartzMetricsTest.java
+co-quartz-jdbc/src/main/java/io/github/cococzl/coquartz/jdbc/service/JdbcReliableAuditService.java
+docs/review-fixes.md
+```
+
+</details>
+
+<details><summary>R20 完整文件（最终收尾提交）</summary>
+
+```text
+.gitattributes
+.github/workflows/ci.yml
+.github/workflows/release.yml
+.mvn/wrapper/maven-wrapper.properties
+CHANGELOG.md
+README.md
+co-quartz-core/pom.xml
+co-quartz-core/src/test/java/io/github/cococzl/coquartz/core/JobSpringLifecycleTest.java
+co-quartz-core/src/test/java/io/github/cococzl/coquartz/core/QuartzJdbcClusterReconciliationIT.java
+co-quartz-core/src/test/java/io/github/cococzl/coquartz/core/QuartzJdbcRetryPersistenceTest.java
+co-quartz-jdbc/src/test/java/io/github/cococzl/coquartz/jdbc/NativeJdbcAuditFailureTest.java
+co-quartz-jdbc/src/test/java/io/github/cococzl/coquartz/jdbc/config/BootQuartzConfigurationMatrixTest.java
+co-quartz-starter/src/test/resources/mockito-extensions/org.mockito.plugins.MockMaker
+docs/review-fixes.md
+mvnw
+mvnw.cmd
+pom.xml
+scripts/check_build_contract.py
+scripts/check_test_reports.py
+```
+
+</details>

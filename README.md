@@ -4,7 +4,7 @@
 
 面向 Spring Boot 的 Quartz Starter：以声明式任务为首选，并提供可靠审计、重试、超时、指标与受控运维能力。
 
-[![JDK](https://img.shields.io/badge/JDK-17+-green.svg)](https://www.oracle.com/java/technologies/javase-downloads.html)
+[![JDK](https://img.shields.io/badge/JDK-17%20%7C%2021-green.svg)](https://www.oracle.com/java/technologies/javase-downloads.html)
 [![Spring Boot](https://img.shields.io/badge/Spring%20Boot-3.3.7-brightgreen.svg)](https://spring.io/projects/spring-boot)
 [![Quartz](https://img.shields.io/badge/Quartz-2.3.2-blue.svg)](http://www.quartz-scheduler.org/)
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
@@ -22,7 +22,7 @@ Co-Quartz 适用于需要在单机或 Quartz JDBC 集群中稳定运行定时任
 - **异步批量写入** — 不阻塞任务执行，大幅降低延迟
 - **告警事件** — 基于 Spring `ApplicationEvent`，支持失败/超时/慢任务/连续失败告警
 - **任务管理 API** — `TaskAdminService`、`TaskQueryService`、`QuartzTaskBuilder`
-- **版本化迁移** — 生产默认不执行 DDL；本地可显式启用 V1/V2 日志迁移
+- **版本化迁移** — 生产默认不执行 DDL；本地可显式启用 V1/V2/V3 日志迁移
 - **Micrometer 集成** — 可选，classpath 存在时自动注册指标
 
 ## 适用范围
@@ -146,7 +146,6 @@ co-quartz:
     auto-create-table: false # production default; enable only for local development
     capture-stack-trace: true
     reliable-audit: false
-    reliable-audit-recovery-threshold-ms: 60000
     datasource: # optional; when set, logs use this datasource instead of Quartz/application datasource
       url: jdbc:postgresql://log-db:5432/co_quartz_log
       username: co_quartz
@@ -176,13 +175,13 @@ co-quartz:
 
 时区规则：任务显式 `timeZone` 优先，否则使用 `co-quartz.scheduling.default-time-zone`；默认值为 `UTC`，不会读取 JVM 或服务器默认时区。固定间隔按绝对时长运行，不受时区或夏令时影响。
 
-超时是协作式取消：达到阈值时 Co-Quartz 请求中断，并报告任务已超时。业务代码必须响应中断；忽略中断的任务会被明确报告为“中断已请求、终止未确认”，不会被宣称为强制终止。超时执行器没有等待队列，饱和时立即拒绝并作为任务失败记录和事件公开。
+超时是协作式取消：业务在 Quartz 工作线程执行，达到阈值时独立定时器请求中断。未退出的业务仍占用该执行和 JobStore 非并发约束，确认退出后才记录超时终态或安排重试。永久忽略中断会长期占用工作线程，也可能阻止等待式关闭。timeout-pool 为兼容保留，已不承载业务执行。
 
 Quartz 触发与失败恢复按至少一次语义交付；业务任务必须自行保证幂等性。
 
 设置 `co-quartz.log.reliable-audit: true` 后，Co-Quartz 会在业务任务开始前同步写入一条 `STARTED` 生命周期记录，并在结束后同步更新同一条记录。开始或结束的审计写入失败会使该次 Quartz 执行失败，避免将其错误报告为已完成；默认异步模式不受此设置影响。异常信息进入任一日志模式前都会经 `LogSanitizer` 脱敏；`capture-stack-trace: false` 可禁止保存和发布堆栈。
 
-启动时会将超过 `reliable-audit-recovery-threshold-ms` 仍为 `STARTED` 的单节点记录收敛为 `INTERRUPTED`。在 Quartz 集群模式，当前节点不会收敛其他节点归属的记录，以免误关闭仍在运行的远端任务。
+不会仅凭 STARTED 超龄自动认定任务中断。恢复需调用 `recoverConfirmedStopped` 并提供明确停机节点与运维证据，详见下文。旧 recovery-threshold 配置保留兼容，已不触发启动恢复。
 
 Quartz 本身使用 Spring Boot 标准配置：
 
@@ -211,7 +210,6 @@ spring:
 co-quartz:
   log:
     reliable-audit: true
-    reliable-audit-recovery-threshold-ms: 60000
 ```
 
 如暂无数据源，可关闭日志：
@@ -226,24 +224,20 @@ co-quartz:
 
 ## 数据库表
 
-生产环境默认不执行自动 DDL。请先执行对应方言的迁移脚本；仅在本地开发时显式设置 `co-quartz.log.auto-create-table: true`，由 Co-Quartz 记录并执行 V1/V2 迁移：
-
-- MySQL: `co-quartz-jdbc/src/main/resources/schema-quartz-task-log-mysql.sql`
-- PostgreSQL: `co-quartz-jdbc/src/main/resources/schema-quartz-task-log-postgresql.sql`
-- H2: `co-quartz-jdbc/src/main/resources/schema-quartz-task-log-h2.sql`
+生产环境默认不执行自动 DDL。生产升级使用 `co-quartz-jdbc/src/main/resources/db/migration/{h2,mysql,postgresql}/` 中的独立版本 SQL：新库顺序 V1→V2→V3，旧库只运行尚未完成的版本。由 Flyway/Liquibase 或部署系统单执行者管理，先备份并核对现有列，避免重复执行。各方言 `schema-quartz-task-log-*.sql` 仅为当前全量安装快照。
 
 ### 升级说明
 
-从旧日志表升级时，显式启用自动迁移一次或按 V1/V2 顺序执行迁移。V2 会保留现有数据并补齐重试次数、最终尝试、执行关联、节点和定义版本字段。生产升级完成后应恢复 `auto-create-table: false`。管理查询不再返回原始 `JobDataMap`；声明式任务的删除和重调度应改为修改代码定义。
+V2 保留原数据并增加尝试、执行关联及定义版本等字段；V3 增加应用/Scheduler 归属与原始 Trigger 信息，旧记录归属保持 NULL。仅本地开发可使用 `auto-create-table: true` 执行 Java 自动迁移；不支持多个节点同时迁移。生产应用无需 DDL 权限。旧版按本地时区存储的历史记录需按原部署时区离线转换为 UTC。管理查询不返回原始 JobDataMap；声明式任务的删除和重调度由代码或显式迁移清单控制。
 
 ### 支持矩阵
 
 | 组件 | 支持版本 |
 |---|---|
-| Java | 17+ |
-| Spring Boot | 3.3.x |
+| Java | CI 17、21（字节码目标 17） |
+| Spring Boot | CI 3.3.7、3.3.13 |
 | Quartz | 2.3.2 |
-| 日志数据库 | H2、MySQL 8+、PostgreSQL 14+ |
+| 日志数据库 | H2；集成目标 MySQL 8.4、PostgreSQL 16 |
 
 ## @QuartzJob 注解参数
 
@@ -333,27 +327,28 @@ co-quartz/
 
 ## 技术栈
 
-- Java 17+ / Spring Boot 3.3.7 / Quartz 2.3.2 / Spring Data JDBC
+- Java 17/21 / Spring Boot 3.3.7、3.3.13 / Quartz 2.3.2 / Spring JDBC
 
 ## 测试
 
-默认测试不依赖 Docker，也不会解析 Testcontainers、MySQL 或 PostgreSQL 驱动：
+构建使用 Maven Wrapper 3.9.9，父 POM 统一 Surefire/Failsafe 3.5.4。默认测试无需 Docker；core 的测试依赖含 MySQL 驱动，JDBC 容器测试依赖仅在 integration-tests profile 启用。Mockito 使用 subclass MockMaker，不要求 JVM 动态自附加。
 
 ```bash
-mvn test
+./mvnw clean verify
+python3 scripts/check_build_contract.py
+python3 scripts/check_test_reports.py
 ```
 
-维护者或 CI 可显式开启数据库集成测试 Profile；它才会下载测试专用依赖，并通过 Testcontainers 执行 MySQL、PostgreSQL 容器验证：
+真实数据库验证需要 Docker。MySQL 集群用例默认跳过，启用后执行六项，必须显式提供**服务器根 URL**（不带库名和查询参数）；测试会在指定服务器创建/重置专用测试库，只能指向可丢弃的测试实例：
 
 ```bash
-mvn verify -Pintegration-tests
+./mvnw clean verify -Pintegration-tests \
+  -Dco.quartz.test.mysql.url=jdbc:mysql://127.0.0.1:3306/ \
+  -Dco.quartz.test.mysql.user=root -Dco.quartz.test.mysql.password=quartz-test
+python3 scripts/check_test_reports.py --require-cluster
 ```
 
-该命令需要可用的 Docker 守护进程。Profile 只影响测试阶段；Testcontainers、Docker Java 和数据库驱动均不会成为公共 jar 的运行时或传递依赖。
-
-## License
-
-[Apache License 2.0](https://opensource.org/licenses/Apache-2.0)
+CI 提供 MySQL 8.4 服务并强制检查集群用例未跳过；profile 另以 Testcontainers 运行 MySQL 8.4/PostgreSQL 16 日志路径。测试计数分开列执行、通过、失败、错误和跳过；请 clean 后运行，避免旧 XML 混入。Profile 不改变公共 jar 的运行时依赖。
 
 ### 增强执行兼容规则（审查修订）
 
@@ -364,11 +359,11 @@ mvn verify -Pintegration-tests
 | `InterruptableJob` | 增强层委托 `interrupt()`，并向实际 Quartz 工作线程请求中断；中断不是强制终止 |
 | 非并发 + timeout | 业务仍在 Quartz 线程，未真正退出前保持 JobStore 的非并发占用；退出后才重试 |
 | 原生 unschedule | 优先于框架重试；增强路径保留标记 |
-| 增强任务 refireImmediately | 使用框架有限延迟重试，禁止两套重试循环；普通原生未增强任务维持 Quartz 原义 |
+| 增强任务 refireImmediately | 使用框架有限延迟重试，禁止两套重试循环；普通原生未增强任务（包括仅可靠审计装饰）维持 Quartz 原义 |
 
 无限忽略中断的业务可能无限占用工作线程，并阻止 `shutdown(wait=true)` 完成。集群不通过 JVM 本地锁控制并发。可靠审计必须使用 `CoQuartzJobFactory` 的受控执行装饰层，JobListener 不负责阻断任务。
 
-传统 Job 由 `CoQuartzJobFactory` 每次创建独立实例：构造器自动注入、字段注入、SchedulerContext → JobDataMap → Trigger 数据属性绑定、初始化与 BeanPostProcessor 代理，再执行并销毁目标实例。不会复用已扫描的 singleton Job。方法任务继续调用原 Spring bean。自定义 JobFactory 不会自动继承这些能力；自定义 Scheduler 必须显式安装 CoQuartzJobFactory，不能直接执行持久化 marker wrapper。
+传统 Job 由 `CoQuartzJobFactory` 每次创建独立实例：构造器自动注入、字段注入、SchedulerContext → JobDataMap → Trigger 数据属性绑定、初始化与 BeanPostProcessor 代理，再执行并销毁目标实例。不会复用已扫描的 singleton Job。方法任务继续调用原 Spring bean。QuartzJobBean 的 execute 是继承的 final 方法；仅在子类标注 @Transactional 不保证拦截该方法，应将事务放入注入的 Spring service（已验证）或方法任务，避免依赖自调用/继承 final 方法的代理语义。自定义 JobFactory 不会自动继承这些能力；自定义 Scheduler 必须显式安装 CoQuartzJobFactory，不能直接执行持久化 marker wrapper。
 
 默认 `LogSanitizer` 尽力覆盖 Authorization Bearer/Basic、带引号 JSON 凭据字段、URL 查询参数与常见 URI/JDBC user:password 格式（password/passwd/pwd/secret/token/access_token/refresh_token/api_key 等，忽略大小写）。它不是通用秘密检测器；自定义格式请提供 `LogSanitizer`。库控制的执行记录、失败事件与基础设施诊断会脱敏；`capture-stack-trace=false` 不保存或发布库控制的堆栈。原始业务异常仍按 Quartz 语义抛出，业务自己的日志、Quartz 原生日志与第三方监听器不在库的脱敏边界内，应在部署日志管道另行治理。
 
@@ -393,3 +388,7 @@ mvn verify -Pintegration-tests
 独立生产迁移位于 `co-quartz-jdbc/src/main/resources/db/migration/{h2,mysql,postgresql}`：新库顺序 V1→V2→V3；已有旧基线表先备份和核对列，跳过 V1，再执行尚未完成的版本。已包含 V2 列的库只执行 V3。脚本交给 Flyway/Liquibase/部署系统单执行者管理，应用无需 DDL 权限，关闭 auto-create-table。脚本不是任意重复执行安全的；尤其 MySQL DDL 可能隐式提交，部分失败需核对实际列/索引、完成缺失步骤并由迁移工具修复版本记录，禁止盲目重跑。当前 schema-quartz-task-log-*.sql 是全量安装快照，不是旧表升级脚本。自动 Java DDL 只支持单迁移者启动，不支持多节点同时迁移。
 
 执行指标按单次尝试计数（含 retry），逻辑执行通过 executionId 关联，active 包含原生观察路径与增强路径；连续失败按本节点完成回调顺序统计，不是集群聚合。指标 job 标签准入同步限制上限，超额归入 other。审计 STARTED gauge 后台每 5 秒刷新，首次可为 NaN，同时提供 sample_age_seconds 和 refresh_failures，抓取不访问日志数据库。告警提供 correlation：executionId、attempt、schedulerInstanceId、finalAttempt；日志管道等非执行事件可为空。告警 dropped/coalesced 提供低基数 gauge。
+
+## License
+
+[Apache License 2.0](https://opensource.org/licenses/Apache-2.0)

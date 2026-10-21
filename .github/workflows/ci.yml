@@ -22,10 +22,21 @@ jobs:
           distribution: temurin
           java-version: ${{ matrix.java }}
           cache: maven
-      - run: mvn -B verify -Dspring.boot.version=${{ matrix.spring-boot }}
+      - run: python3 scripts/check_build_contract.py
+      - run: ./mvnw -B verify -Dspring.boot.version=${{ matrix.spring-boot }}
+      - run: python3 scripts/check_test_reports.py
 
   database-integration:
     runs-on: ubuntu-latest
+    services:
+      mysql:
+        image: mysql:8.4
+        env:
+          MYSQL_ROOT_PASSWORD: quartz-test
+        ports: ['3306:3306']
+        options: >-
+          --health-cmd="mysqladmin ping -h localhost -pquartz-test"
+          --health-interval=10s --health-timeout=5s --health-retries=12
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-java@v4
@@ -33,4 +44,8 @@ jobs:
           distribution: temurin
           java-version: 17
           cache: maven
-      - run: mvn -B verify -Pintegration-tests
+      - run: >-
+          ./mvnw -B verify -Pintegration-tests
+          '-Dco.quartz.test.mysql.url=jdbc:mysql://127.0.0.1:3306/'
+          -Dco.quartz.test.mysql.user=root -Dco.quartz.test.mysql.password=quartz-test
+      - run: python3 scripts/check_test_reports.py --require-cluster

@@ -139,10 +139,12 @@ class QuartzJdbcClusterReconciliationIT {
         }
     }
 
-    @Test
-    void nonConcurrentTaskDoesNotOverlapWhenBothClusterNodesTriggerIt() throws Exception {
+    @org.junit.jupiter.params.ParameterizedTest
+    @org.junit.jupiter.params.provider.ValueSource(longs = {0, 30})
+    void nonConcurrentTaskDoesNotOverlapWhenBothClusterNodesTriggerIt(long timeout) throws Exception {
         Scheduler first = newClusterScheduler("node-a");
         Scheduler second = newClusterScheduler("node-b");
+        assertThat(second).as("independent cluster scheduler instances").isNotSameAs(first);
         first.setJobFactory(new CoQuartzJobFactory());
         second.setJobFactory(new CoQuartzJobFactory());
         ClusterBlockingJob.reset();
@@ -153,22 +155,23 @@ class QuartzJdbcClusterReconciliationIT {
                 .intervalInSeconds(3600)
                 .startAt(new java.util.Date(System.currentTimeMillis() + TimeUnit.HOURS.toMillis(1)))
                 .concurrent(false)
+                .timeout(timeout).retryTimes(timeout > 0 ? 1 : 0).retryInterval(20)
                 .schedule(first);
         first.start();
         second.start();
 
         JobKey jobKey = JobKey.jobKey("nonConcurrentClusterTask", "DEFAULT");
-        first.triggerJob(jobKey);
-        assertThat(ClusterBlockingJob.firstStarted.await(10, TimeUnit.SECONDS)).isTrue();
-        second.triggerJob(jobKey);
-
-        Thread.sleep(500);
-        assertThat(ClusterBlockingJob.starts.get()).isEqualTo(1);
-        assertThat(ClusterBlockingJob.maxActive.get()).isEqualTo(1);
-
-        ClusterBlockingJob.release.countDown();
-        assertThat(ClusterBlockingJob.secondStarted.await(10, TimeUnit.SECONDS)).isTrue();
-        assertThat(ClusterBlockingJob.maxActive.get()).isEqualTo(1);
+        try {
+            first.triggerJob(jobKey);
+            assertThat(ClusterBlockingJob.firstStarted.await(10, TimeUnit.SECONDS)).isTrue();
+            second.triggerJob(jobKey);
+            Thread.sleep(500);
+            assertThat(ClusterBlockingJob.starts.get()).isEqualTo(1);
+            assertThat(ClusterBlockingJob.maxActive.get()).isEqualTo(1);
+            ClusterBlockingJob.release.countDown();
+            assertThat(ClusterBlockingJob.secondStarted.await(10, TimeUnit.SECONDS)).isTrue();
+            assertThat(ClusterBlockingJob.maxActive.get()).isEqualTo(1);
+        } finally { ClusterBlockingJob.release.countDown(); }
     }
 
     private void runNodeProcessesTogether(String definition) throws Exception {
@@ -191,6 +194,9 @@ class QuartzJdbcClusterReconciliationIT {
     }
 
     private Scheduler newClusterScheduler(String instanceId) throws Exception {
+        // Quartz's JVM-local repository keys by scheduler name. Remove only this test
+        // cluster binding so both live nodes use distinct schedulers and the same DB name.
+        org.quartz.impl.SchedulerRepository.getInstance().remove("coQuartzTask4Cluster");
         Scheduler scheduler = createClusterScheduler(databaseUrl, username, password, instanceId);
         schedulers.add(scheduler);
         return scheduler;
@@ -296,9 +302,11 @@ class QuartzJdbcClusterReconciliationIT {
                 secondStarted.countDown();
             }
             try {
-                release.await(10, TimeUnit.SECONDS);
-            } catch (InterruptedException e) {
-                Thread.currentThread().interrupt();
+                long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(10);
+                while (release.getCount() > 0 && System.nanoTime() < deadline) {
+                    try { release.await(100, TimeUnit.MILLISECONDS); }
+                    catch (InterruptedException ignored) { /* deliberately uncooperative business */ }
+                }
             } finally {
                 active.decrementAndGet();
             }

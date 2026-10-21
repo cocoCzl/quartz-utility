@@ -48,7 +48,7 @@ class QuartzJdbcRetryPersistenceTest {
     @AfterEach
     void tearDown() throws Exception {
         for (Scheduler scheduler : schedulers) {
-            scheduler.shutdown(false);
+            scheduler.shutdown(true);
         }
         timeoutExecutor.shutdownNow();
     }
@@ -71,7 +71,7 @@ class QuartzJdbcRetryPersistenceTest {
         } while (!retryPersisted && System.nanoTime() < retryDeadline);
         assertThat(retryPersisted).isTrue();
 
-        first.shutdown(false);
+        first.shutdown(true);
         schedulers.remove(first);
 
         Scheduler restarted = scheduler("restarted");
@@ -104,6 +104,37 @@ class QuartzJdbcRetryPersistenceTest {
                 .isEqualTo("updated");
         assertThat(((org.quartz.SimpleTrigger) scheduler.getTrigger(org.quartz.TriggerKey.triggerKey("TRIGGER_update")))
                 .getRepeatInterval()).isEqualTo(120000);
+    }
+
+    @Test
+    void nativePersistentDataIsAvailableAfterJdbcSchedulerRestart() throws Exception {
+        Scheduler first = scheduler("persistent-first");
+        var key = JobKey.jobKey("counter");
+        QuartzTaskBuilder.newBuilder().jobClass(PersistentCounterJob.class).jobName("counter")
+                .intervalInSeconds(3600).startAt(new java.util.Date(System.currentTimeMillis() + 3600000))
+                .jobData("count", 0).schedule(first);
+        first.start(); first.triggerJob(key);
+        awaitCounter(first, key, 1);
+        first.shutdown(true); schedulers.remove(first);
+        Scheduler restarted = scheduler("persistent-restarted");
+        assertThat(restarted.getJobDetail(key).getJobDataMap().getInt("count")).isEqualTo(1);
+        restarted.start(); restarted.triggerJob(key);
+        awaitCounter(restarted, key, 2);
+    }
+
+    private void awaitCounter(Scheduler scheduler, JobKey key, int count) throws Exception {
+        long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(5);
+        while (scheduler.getJobDetail(key).getJobDataMap().getInt("count") != count
+                && System.nanoTime() < deadline) Thread.sleep(20);
+        assertThat(scheduler.getJobDetail(key).getJobDataMap().getInt("count")).isEqualTo(count);
+    }
+
+    @org.quartz.PersistJobDataAfterExecution
+    public static class PersistentCounterJob implements Job {
+        public void execute(JobExecutionContext context) {
+            var data = context.getJobDetail().getJobDataMap();
+            data.put("count", data.getInt("count") + 1);
+        }
     }
 
     private Scheduler scheduler(String instanceId) throws Exception {

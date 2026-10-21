@@ -77,4 +77,68 @@ class JobSpringLifecycleTest {
             assertThat(LifecycleJob.destroyed).hasValue(2);
         } finally { scheduler.shutdown(true); }
     }
+    @org.springframework.context.annotation.Configuration(proxyBeanMethods = false)
+    @org.springframework.transaction.annotation.EnableTransactionManagement
+    static class TransactionConfig {
+        @org.springframework.context.annotation.Bean
+        org.springframework.transaction.PlatformTransactionManager transactionManager() {
+            return new org.springframework.transaction.support.AbstractPlatformTransactionManager() {
+                protected Object doGetTransaction() { return new Object(); }
+                protected void doBegin(Object tx, org.springframework.transaction.TransactionDefinition definition) { }
+                protected void doCommit(org.springframework.transaction.support.DefaultTransactionStatus status) { }
+                protected void doRollback(org.springframework.transaction.support.DefaultTransactionStatus status) { }
+            };
+        }
+    }
+
+    public static class TransactionalQuartzBean extends org.springframework.scheduling.quartz.QuartzJobBean {
+        static AtomicInteger executions = new AtomicInteger();
+        static AtomicInteger destroyed = new AtomicInteger();
+        final Dependency dependency;
+        final TransactionalService service;
+        String payload;
+        boolean initialized;
+        public TransactionalQuartzBean(Dependency dependency, TransactionalService service) { this.dependency = dependency; this.service = service; }
+        public void setPayload(String payload) { this.payload = payload; }
+        @PostConstruct void init() { initialized = payload != null; }
+        @PreDestroy void destroy() { destroyed.incrementAndGet(); }
+        protected void executeInternal(JobExecutionContext context) {
+            assertThat(dependency).isNotNull();
+            assertThat(initialized).isTrue();
+            assertThat(payload).isEqualTo("tx-payload");
+            service.verifyTransaction();
+            executions.incrementAndGet();
+        }
+    }
+
+    public static class TransactionalService {
+        @org.springframework.transaction.annotation.Transactional
+        public void verifyTransaction() {
+            assertThat(org.springframework.transaction.support.TransactionSynchronizationManager.isActualTransactionActive()).isTrue();
+        }
+    }
+
+    @ParameterizedTest @ValueSource(booleans = {true, false})
+    void quartzJobBeanKeepsInjectedTransactionalServiceAndLifecycle(boolean concurrent) throws Exception {
+        TransactionalQuartzBean.executions.set(0); TransactionalQuartzBean.destroyed.set(0);
+        var scheduler = new BuilderScheduleRegressionTest().scheduler();
+        try (var context = new AnnotationConfigApplicationContext(TransactionConfig.class, Dependency.class, TransactionalService.class)) {
+            var factory = new CoQuartzJobFactory();
+            factory.setBeanFactory(context.getAutowireCapableBeanFactory());
+            factory.setProperties(new io.github.cococzl.coquartz.config.CoQuartzProperties());
+            for (int i = 0; i < 2; i++) {
+                QuartzTaskBuilder.newBuilder().jobClass(TransactionalQuartzBean.class)
+                        .jobName("tx").intervalInSeconds(3600).concurrent(concurrent)
+                        .jobData("payload", "tx-payload").schedule(scheduler);
+                var detail = scheduler.getJobDetail(JobKey.jobKey("tx"));
+                var trigger = (OperableTrigger) TriggerBuilder.newTrigger().forJob(detail).build();
+                var bundle = new TriggerFiredBundle(detail, trigger, null, false, new Date(), new Date(), null, null);
+                Job job = factory.newJob(bundle, scheduler);
+                job.execute(new org.quartz.impl.JobExecutionContextImpl(scheduler, bundle, job));
+            }
+            assertThat(TransactionalQuartzBean.executions).hasValue(2);
+            assertThat(TransactionalQuartzBean.destroyed).hasValue(2);
+        } finally { scheduler.shutdown(true); }
+    }
+
 }
