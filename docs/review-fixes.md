@@ -109,3 +109,9 @@ fingerprint v2 加入 beanName/methodName 并存储绑定元数据、应用 name
 内部清理定义协调更新/禁用删除，额外自动配置在日志关闭时仍执行移除；冲突身份拒绝覆盖。执行时间 UTC、耗时 nanoTime，终态每次限 1000 条、STARTED 不删，增加索引及清理非并发标记。旧非 UTC 历史记录需按旧部署时区离线迁移，不能猜测历史时区自动改写。
 
 未验证：真实数据库大表锁/IO 压测、非 UTC 历史迁移；禁用迁移自动配置仍待最终 Boot 全量验证。
+
+## R16
+
+确认成立。非法分页和 retry 优先于 cron 的回归修复前失败。`mvn -q -pl co-quartz-jdbc -am -Dtest=TaskQueryServiceTest,JdbcTaskLogRepositoryTest -Dsurefire.failIfNoSpecifiedTests=false test`：19 通过。
+
+存储主 Trigger 身份并提供用途列表，展示 delegate/方法来源；运行查询明确 local。分页校验和 long offset、复合排序，已有时间窗口过滤保留；listJobs 与 Actuator 限量。未引入游标分页或集群运行全景，不宣称动态插入下 offset 分页快照一致。

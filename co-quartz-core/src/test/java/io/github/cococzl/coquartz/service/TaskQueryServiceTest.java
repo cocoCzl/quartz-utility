@@ -33,6 +33,24 @@ class TaskQueryServiceTest {
         assertThat(TaskInfo.class.getMethods()).noneMatch(method -> method.getName().equals("getJobData"));
     }
 
+    @Test
+    void mainScheduleWinsOverEarlierRetryAndActualDelegateIsShown() throws Exception {
+        Scheduler scheduler = mock(Scheduler.class);
+        var key = JobKey.jobKey("declared");
+        var detail = org.quartz.JobBuilder.newJob(io.github.cococzl.coquartz.core.NonConcurrentJobWrapper.class)
+                .withIdentity(key).usingJobData(CoQuartzConstants.DELEGATE_JOB_CLASS, TaskAdminServiceTest.NoopJob.class.getName()).build();
+        var retry = org.quartz.TriggerBuilder.newTrigger().withIdentity("retry", CoQuartzConstants.RETRY_TRIGGER_GROUP)
+                .forJob(key).build();
+        var main = org.quartz.TriggerBuilder.newTrigger().withIdentity("TRIGGER_declared")
+                .withSchedule(org.quartz.CronScheduleBuilder.cronSchedule("0 0 9 * * ?")).forJob(key).build();
+        when(scheduler.getJobDetail(key)).thenReturn(detail);
+        org.mockito.Mockito.doReturn(java.util.List.of(retry, main)).when(scheduler).getTriggersOfJob(key);
+        when(scheduler.getTriggerState(org.mockito.ArgumentMatchers.any())).thenReturn(org.quartz.Trigger.TriggerState.NORMAL);
+        var info = new TaskQueryService(scheduler).getJobDetail("declared", "DEFAULT");
+        assertThat(info.getTriggerType()).isEqualTo("CRON");
+        assertThat(info.getJobClassName()).isEqualTo(TaskAdminServiceTest.NoopJob.class.getName());
+    }
+
     private org.quartz.JobBuilder job(String name) {
         return JobBuilder.newJob(TaskAdminServiceTest.NoopJob.class).withIdentity(name, "DEFAULT");
     }

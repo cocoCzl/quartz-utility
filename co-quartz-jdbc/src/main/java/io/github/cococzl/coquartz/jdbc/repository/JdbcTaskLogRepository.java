@@ -207,6 +207,12 @@ public class JdbcTaskLogRepository implements TaskLogRepository {
 
     @Override
     public PageResult<TaskExecutionLog> pageLogs(TaskLogQuery query) {
+        if (query.getPage() < 1 || query.getSize() < 1 || query.getSize() > 1000) {
+            throw new IllegalArgumentException("Page must be positive and size must be 1..1000");
+        }
+        if (query.getStartTime() != null && query.getEndTime() != null && query.getStartTime().isAfter(query.getEndTime())) {
+            throw new IllegalArgumentException("Invalid log time window");
+        }
         StringBuilder sql = new StringBuilder("SELECT * FROM quartz_task_log WHERE 1=1");
         StringBuilder countSql = new StringBuilder("SELECT COUNT(*) FROM quartz_task_log WHERE 1=1");
         List<Object> params = new java.util.ArrayList<>();
@@ -239,8 +245,8 @@ public class JdbcTaskLogRepository implements TaskLogRepository {
 
         long total = jdbcTemplate.queryForObject(countSql.toString(), Long.class, params.toArray());
 
-        sql.append(" ORDER BY start_time DESC");
-        int offset = (query.getPage() - 1) * query.getSize();
+        sql.append(" ORDER BY start_time DESC, id DESC");
+        long offset = ((long) query.getPage() - 1) * query.getSize();
         sql.append(" LIMIT ? OFFSET ?");
 
         List<Object> pageParams = new java.util.ArrayList<>(params);
@@ -253,13 +259,13 @@ public class JdbcTaskLogRepository implements TaskLogRepository {
 
     @Override
     public List<TaskExecutionLog> latestLogs(String jobKey, int limit) {
-        String sql = "SELECT * FROM quartz_task_log WHERE job_key = ? ORDER BY start_time DESC LIMIT ?";
+        String sql = "SELECT * FROM quartz_task_log WHERE job_key = ? ORDER BY start_time DESC, id DESC LIMIT ?";
         return jdbcTemplate.query(sql, ROW_MAPPER, jobKey, limit);
     }
 
     @Override
     public List<TaskExecutionLog> failedLogs(int limit) {
-        String sql = "SELECT * FROM quartz_task_log WHERE exec_state = ? ORDER BY start_time DESC LIMIT ?";
+        String sql = "SELECT * FROM quartz_task_log WHERE exec_state = ? ORDER BY start_time DESC, id DESC LIMIT ?";
         return jdbcTemplate.query(sql, ROW_MAPPER, LogTaskExecStateEnum.FAIL.getCode(), limit);
     }
 
@@ -296,13 +302,13 @@ public class JdbcTaskLogRepository implements TaskLogRepository {
 
     @Override
     public List<TaskExecutionLog> findRecentByJobKey(String jobKey, int limit) {
-        String sql = "SELECT * FROM quartz_task_log WHERE job_key = ? ORDER BY start_time DESC LIMIT ?";
+        String sql = "SELECT * FROM quartz_task_log WHERE job_key = ? ORDER BY start_time DESC, id DESC LIMIT ?";
         return jdbcTemplate.query(sql, ROW_MAPPER, jobKey, limit);
     }
 
     @Override
     public List<TaskExecutionLog> findByTimeRange(LocalDateTime start, LocalDateTime end) {
-        String sql = "SELECT * FROM quartz_task_log WHERE start_time >= ? AND start_time <= ? ORDER BY start_time DESC";
+        String sql = "SELECT * FROM quartz_task_log WHERE start_time >= ? AND start_time <= ? ORDER BY start_time DESC, id DESC";
         return jdbcTemplate.query(sql, ROW_MAPPER, start, end);
     }
 

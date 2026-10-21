@@ -385,3 +385,5 @@ mvn verify -Pintegration-tests
 方法删除/重命名不会自动删除未扫描到的任务。使用显式 `DefinitionMigrationPlan(namespace, retiredJobKeys)`：先 preview 检查所有权，再在所有节点停止/standby、单执行者条件下 apply。仅匹配 namespace 且 code-owned 的任务可移除；legacy 无 namespace 需先同版本协调补元数据。可将旧任务保留为 enabled=false 的 tombstone 完成迁移。
 
 清理任务会在重启时协调 retention-days、cron 和时区；关闭日志时移除已持久化的内部清理任务。执行记录时间按 UTC LocalDateTime 映射，耗时用单调时钟。旧版非 UTC 历史数据须按原部署时区离线转换后再按 UTC 清理。每次 cleanup 最多删除 1000 条终态记录（SUCCESS/FAIL/INTERRUPTED），保留 STARTED；积压可通过更密清理计划逐步排空。清理 Job 禁止并发，提供 exec_state/execute_time/id 索引。
+
+查询详情展示业务 delegate/方法来源及带用途的 Trigger 列表（PRIMARY/RETRY/MANUAL/RECOVERY/EXTERNAL），主字段优先使用持久化主 Trigger 身份。`getRunningJobs`/`getLocalRunningJobs` 只代表当前 Scheduler 节点。`listJobs()` 最多 1000 条，可用 listJobs(limit)；Actuator 摘要最多 100 条并标记 LOCAL_SCHEDULER。日志分页 page>=1、size=1..1000，long offset，按 start_time DESC/id DESC 稳定排序；并发插入期间 offset 分页仍可能移动，精确历史遍历应固定时间窗口。

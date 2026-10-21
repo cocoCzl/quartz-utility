@@ -216,6 +216,9 @@ public class QuartzTaskBuilder {
             }
         }
         Map<String, Object> allData = new HashMap<>(jobData);
+        allData.put(CoQuartzConstants.MAIN_TRIGGER_KEY, TriggerKey.triggerKey(
+                triggerName == null ? CoQuartzConstants.TRIGGER_KEY_PREFIX + jobName : triggerName,
+                effectiveTriggerGroup()).toString());
         allData.put(CoQuartzConstants.OWNER, CoQuartzConstants.OWNER_VALUE);
         allData.put(CoQuartzConstants.CODE_OWNED, "false");
         allData.put(CoQuartzConstants.METADATA_VERSION, CoQuartzConstants.METADATA_VERSION_VALUE);

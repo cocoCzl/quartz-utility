@@ -145,6 +145,23 @@ class JdbcTaskLogRepositoryTest {
     }
 
     @Test
+    void paginationRejectsInvalidSizeAndOrdersEqualTimestampsById() {
+        var query = new TaskLogQuery(); query.setPage(0);
+        assertThatThrownBy(() -> repository.pageLogs(query)).isInstanceOf(IllegalArgumentException.class);
+        query.setPage(1); query.setSize(1001);
+        assertThatThrownBy(() -> repository.pageLogs(query)).isInstanceOf(IllegalArgumentException.class);
+        var time = LocalDateTime.of(2026, 1, 1, 0, 0);
+        for (String id : List.of("a", "c", "b")) {
+            var entry = createLog("ties", LogTaskExecStateEnum.SUCCESS, 1, true);
+            entry.setId(id); entry.setStartTime(time); repository.insert(entry);
+        }
+        query.setSize(1); query.setJobKey("ties");
+        assertThat(repository.pageLogs(query).getRecords()).extracting(TaskExecutionLog::getId).containsExactly("c");
+        query.setPage(2);
+        assertThat(repository.pageLogs(query).getRecords()).extracting(TaskExecutionLog::getId).containsExactly("b");
+    }
+
+    @Test
     void startedRecordsCanBeAtomicallyMarkedInterrupted() {
         TaskExecutionLog old = createLog("DEFAULT.oldAudit", LogTaskExecStateEnum.STARTED, 1, false);
         old.setStartTime(LocalDateTime.now().minusMinutes(2));

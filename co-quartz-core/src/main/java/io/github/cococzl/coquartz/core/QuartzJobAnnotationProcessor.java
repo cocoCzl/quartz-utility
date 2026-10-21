@@ -295,6 +295,7 @@ public class QuartzJobAnnotationProcessor implements SmartInitializingSingleton 
         JobDataMap quartzJobDataMap = new JobDataMap(jobDataMap);
         quartzJobDataMap.put(CoQuartzConstants.TIME_ZONE,
                 schedule.timeZone() == null ? "" : schedule.timeZone());
+        quartzJobDataMap.put(CoQuartzConstants.MAIN_TRIGGER_KEY, trigger.getKey().toString());
         quartzJobDataMap.put(CoQuartzConstants.APPLICATION_NAMESPACE, properties.getScheduling().getApplicationNamespace());
         if (definition.isMethodTask()) {
             quartzJobDataMap.put(CoQuartzConstants.METHOD_BEAN, definition.getMethodBeanName());

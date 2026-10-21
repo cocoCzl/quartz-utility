@@ -37,7 +37,7 @@ public class CoQuartzEndpoint {
 
     @ReadOperation
     public Map<String, Object> summary() throws Exception {
-        List<Map<String, Object>> tasks = taskQueryService.listJobs().stream().map(this::task).toList();
+        List<Map<String, Object>> tasks = taskQueryService.listJobs(100).stream().map(this::task).toList();
         TaskExecutionLogWriter pipeline = logPipeline.getIfAvailable();
         AsyncLogPipelineStatus pipelineStatus = pipeline == null ? null : pipeline.getPipelineStatus();
         TaskMonitoringService taskMonitoring = monitoring.getIfAvailable();
@@ -48,7 +48,7 @@ public class CoQuartzEndpoint {
         if (taskLogRepository != null) {
             try { auditStarted = taskLogRepository.countStarted(); } catch (UnsupportedOperationException ignored) { }
         }
-        return Map.of("tasks", tasks, "recentFailures", recentFailures, "auditStarted", auditStarted,
+        return Map.of("tasks", tasks, "taskLimit", 100, "runningScope", "LOCAL_SCHEDULER", "recentFailures", recentFailures, "auditStarted", auditStarted,
                 "logPipeline", pipelineStatus == null ? Map.of("available", false) : Map.of(
                         "available", true, "queueSize", pipelineStatus.queueSize(), "dropped", pipelineStatus.droppedCount(),
                         "writeFailures", pipelineStatus.writeFailureCount(), "unflushed", pipelineStatus.unflushedCount()));

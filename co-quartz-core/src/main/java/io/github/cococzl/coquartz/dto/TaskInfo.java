@@ -2,6 +2,12 @@ package io.github.cococzl.coquartz.dto;
 
 public class TaskInfo {
 
+    private java.util.List<TaskTriggerInfo> triggers = java.util.List.of();
+    private String methodSource;
+    public java.util.List<TaskTriggerInfo> getTriggers() { return triggers; }
+    public void setTriggers(java.util.List<TaskTriggerInfo> value) { triggers = java.util.List.copyOf(value); }
+    public String getMethodSource() { return methodSource; }
+    public void setMethodSource(String value) { methodSource = value; }
     private String jobName;
     private String jobGroup;
     private String jobClassName;
