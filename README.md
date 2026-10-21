@@ -354,3 +354,16 @@ mvn verify -Pintegration-tests
 ## License
 
 [Apache License 2.0](https://opensource.org/licenses/Apache-2.0)
+
+### 增强执行兼容规则（审查修订）
+
+| 原生能力 | 框架行为 |
+|---|---|
+| `@PersistJobDataAfterExecution` | 仅在业务 Job 声明时保留；非并发任务选择独立持久化 wrapper |
+| `@DisallowConcurrentExecution` | 原生注解优先；`concurrent=true` 不会取消原生限制 |
+| `InterruptableJob` | 增强层委托 `interrupt()`，并向实际 Quartz 工作线程请求中断；中断不是强制终止 |
+| 非并发 + timeout | 业务仍在 Quartz 线程，未真正退出前保持 JobStore 的非并发占用；退出后才重试 |
+| 原生 unschedule | 优先于框架重试；增强路径保留标记 |
+| 增强任务 refireImmediately | 使用框架有限延迟重试，禁止两套重试循环；普通原生未增强任务维持 Quartz 原义 |
+
+无限忽略中断的业务可能无限占用工作线程，并阻止 `shutdown(wait=true)` 完成。集群不通过 JVM 本地锁控制并发。可靠审计必须使用 `CoQuartzJobFactory` 的受控执行装饰层，JobListener 不负责阻断任务。

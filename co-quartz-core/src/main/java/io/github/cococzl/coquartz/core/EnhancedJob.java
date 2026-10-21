@@ -18,7 +18,9 @@ import org.slf4j.LoggerFactory;
 import java.time.LocalDateTime;
 import java.util.concurrent.*;
 
-public class EnhancedJob implements Job {
+public class EnhancedJob implements InterruptableJob {
+
+    private volatile Thread executionThread;
 
     private static final Logger log = LoggerFactory.getLogger(EnhancedJob.class);
 
@@ -93,6 +95,7 @@ public class EnhancedJob implements Job {
 
     @Override
     public void execute(JobExecutionContext context) throws JobExecutionException {
+        executionThread = Thread.currentThread();
         int retryTimes = getIntConfig(CoQuartzConstants.RETRY_TIMES, 0);
         long retryInterval = getLongConfig(CoQuartzConstants.RETRY_INTERVAL, 1000);
         boolean exponentialBackoff = getBooleanConfig(CoQuartzConstants.EXPONENTIAL_BACKOFF, false);
@@ -236,9 +239,20 @@ public class EnhancedJob implements Job {
                 return;
             }
         } finally {
+            executionThread = null;
             if (metrics != null) {
                 metrics.jobFinished();
             }
+        }
+    }
+
+    @Override
+    public void interrupt() throws UnableToInterruptJobException {
+        try {
+            if (delegate instanceof InterruptableJob interruptable) interruptable.interrupt();
+        } finally {
+            Thread worker = executionThread;
+            if (worker != null) worker.interrupt();
         }
     }
 

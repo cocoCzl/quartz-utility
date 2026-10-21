@@ -233,7 +233,9 @@ public class QuartzTaskBuilder {
             allData.put(CoQuartzConstants.DELEGATE_JOB_CLASS, jobClass.getName());
         }
 
-        JobBuilder builder = JobBuilder.newJob(concurrent ? jobClass : NonConcurrentJobWrapper.class)
+        JobBuilder builder = JobBuilder.newJob(concurrent ? jobClass
+                : jobClass.isAnnotationPresent(PersistJobDataAfterExecution.class)
+                ? PersistentNonConcurrentJobWrapper.class : NonConcurrentJobWrapper.class)
                 .withIdentity(jobName, jobGroup)
                 .storeDurably(durable)
                 .requestRecovery(recoverable)

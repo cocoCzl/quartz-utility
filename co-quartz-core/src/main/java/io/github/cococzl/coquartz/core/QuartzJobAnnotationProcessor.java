@@ -297,7 +297,8 @@ public class QuartzJobAnnotationProcessor implements SmartInitializingSingleton 
 
         JobDetail jobDetail = JobBuilder.newJob(definition.isConcurrent()
                         ? definition.getJobClass()
-                        : NonConcurrentJobWrapper.class)
+                        : definition.getJobClass().isAnnotationPresent(PersistJobDataAfterExecution.class)
+                        ? PersistentNonConcurrentJobWrapper.class : NonConcurrentJobWrapper.class)
                 .withIdentity(jobName, jobGroup)
                 .storeDurably(definition.isDurable())
                 .requestRecovery(definition.isRecoverable())
