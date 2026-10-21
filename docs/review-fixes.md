@@ -93,3 +93,11 @@ unschedule 优先且不安排重试；增强任务 refireImmediately 归一到�
 确认成立。阻塞告警消费者、提交 2000 条后的容量回归修复前失败。`mvn -q -pl co-quartz-jdbc -am -Dtest=AlertEventPublisherAsyncTest,AlertEventPublisherTest,JdbcReliableAuditServiceTest,CoQuartzAutoConfigurationTest -Dsurefire.failIfNoSpecifiedTests=false test`：17 通过。
 
 生产线程池队列 256，AbortPolicy，发布层捕获拒绝并计 dropped；job/type 合并 1 秒重复故障，计 coalesced。failureWindows 最大 1024、1 小时 TTL；成功清理，缓存容量通过 5000 个删除任务场景验证。JDBC 自动配置审计失败事件转入同一异步 publisher，保留原始数据库异常，不使用 CallerRunsPolicy。
+
+## R14
+
+确认方法绑定 fingerprint 缺失、live rescan 不安全与删除迁移缺口。2 个回归修复前失败；`mvn -q -pl co-quartz-core -Dtest=QuartzJobReconciliationTest,QuartzJobAnnotationProcessorTest test`：31 通过（包括新增迁移预览、跨 namespace 拒绝、幂等 tombstone）。H2 声明式重启此前单独验证通过。
+
+fingerprint v2 加入 beanName/methodName 并存储绑定元数据、应用 namespace。拒绝 active Scheduler live rescan；显式 DefinitionMigrationPlan 支持预览与受控删除，仅自己 namespace/code-owned，未扫描任务不自动删除。明确不支持共享 JDBC 混合版本多写者，必须所有节点 standby/停止和单写者发布；不宣称已解决暂停重调度的跨节点窗口。
+
+未验证：真实 MySQL/PostgreSQL 多节点更新与暂停竞争。采用明确支持边界，未引入只靠摘要或 JVM 锁的虚假版本协调。

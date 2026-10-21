@@ -17,7 +17,7 @@ import java.util.Date;
  */
 public final class QuartzDefinitionFingerprint {
 
-    public static final String JOB_PROJECTION_VERSION = "1";
+    public static final String JOB_PROJECTION_VERSION = "2";
     public static final String SCHEDULE_PROJECTION_VERSION = "1";
 
     private QuartzDefinitionFingerprint() {
@@ -30,6 +30,8 @@ public final class QuartzDefinitionFingerprint {
                 definition.isMethodTask()
                         ? CoQuartzConstants.SOURCE_DECLARATIVE_METHOD
                         : CoQuartzConstants.SOURCE_ANNOTATED_QUARTZ_JOB,
+                normalized(definition.getMethodBeanName()),
+                normalized(definition.getMethodName()),
                 normalized(definition.getDescription()),
                 Boolean.toString(definition.isDurable()),
                 Boolean.toString(definition.isRecoverable()),
@@ -49,6 +51,8 @@ public final class QuartzDefinitionFingerprint {
                         ? jobDetail.getJobClass().getName()
                         : stringValue(data, CoQuartzConstants.DELEGATE_JOB_CLASS),
                 stringValue(data, CoQuartzConstants.TASK_SOURCE),
+                stringValue(data, CoQuartzConstants.METHOD_BEAN),
+                stringValue(data, CoQuartzConstants.METHOD_NAME),
                 normalized(jobDetail.getDescription()),
                 Boolean.toString(jobDetail.isDurable()),
                 Boolean.toString(jobDetail.requestsRecovery()),

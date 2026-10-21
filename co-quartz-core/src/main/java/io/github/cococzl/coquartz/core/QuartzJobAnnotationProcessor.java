@@ -80,6 +80,13 @@ public class QuartzJobAnnotationProcessor implements SmartInitializingSingleton 
         }
 
         try {
+            if (coQuartzScheduler.getScheduler().isStarted() && !coQuartzScheduler.getScheduler().isInStandbyMode()) {
+                throw new CoQuartzConfigurationException("Definition reconciliation requires scheduler standby; live rescanning is unsupported");
+            }
+        } catch (SchedulerException failure) {
+            throw new CoQuartzSchedulingException("Cannot verify reconciliation standby", failure);
+        }
+        try {
             for (PreparedSchedule schedule : schedules) {
                 preflightSchedule(schedule);
             }
@@ -288,6 +295,11 @@ public class QuartzJobAnnotationProcessor implements SmartInitializingSingleton 
         JobDataMap quartzJobDataMap = new JobDataMap(jobDataMap);
         quartzJobDataMap.put(CoQuartzConstants.TIME_ZONE,
                 schedule.timeZone() == null ? "" : schedule.timeZone());
+        quartzJobDataMap.put(CoQuartzConstants.APPLICATION_NAMESPACE, properties.getScheduling().getApplicationNamespace());
+        if (definition.isMethodTask()) {
+            quartzJobDataMap.put(CoQuartzConstants.METHOD_BEAN, definition.getMethodBeanName());
+            quartzJobDataMap.put(CoQuartzConstants.METHOD_NAME, definition.getMethodName());
+        }
         quartzJobDataMap.put(CoQuartzConstants.JOB_FINGERPRINT, jobFingerprint);
         quartzJobDataMap.put(CoQuartzConstants.SCHEDULE_FINGERPRINT, scheduleFingerprint);
         quartzJobDataMap.put(CoQuartzConstants.DEFINITION_VERSION, definitionVersion);
@@ -457,6 +469,10 @@ public class QuartzJobAnnotationProcessor implements SmartInitializingSingleton 
 
     private void assertCodeOwned(JobDetail existingJob, String requestedBy) {
         JobDataMap dataMap = existingJob.getJobDataMap();
+        String namespace = dataMap.getString(CoQuartzConstants.APPLICATION_NAMESPACE);
+        if (namespace != null && !namespace.equals(properties.getScheduling().getApplicationNamespace())) {
+            throw new CoQuartzConfigurationException("Task " + existingJob.getKey() + " belongs to another application namespace");
+        }
         boolean owned = CoQuartzConstants.OWNER_VALUE.equals(dataMap.getString(CoQuartzConstants.OWNER));
         boolean codeOwned = Boolean.parseBoolean(dataMap.getString(CoQuartzConstants.CODE_OWNED));
         if (!owned || !codeOwned) {

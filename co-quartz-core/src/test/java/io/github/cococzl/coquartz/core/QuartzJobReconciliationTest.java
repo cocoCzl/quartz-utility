@@ -345,6 +345,44 @@ class QuartzJobReconciliationTest {
                 .getString(CoQuartzConstants.PAUSE_RESTORE_PENDING)).isNull();
     }
 
+    @Test
+    void methodBindingChangeChangesDefinitionVersion() throws Exception {
+        scheduler = newScheduler();
+        String original;
+        try (var first = context("versionedTaskBean", InitialTaskBean.class)) {
+            processor(first).registerJobs();
+            original = scheduler.getJobDetail(JobKey.jobKey("reconcileTask")).getJobDataMap()
+                    .getString(CoQuartzConstants.DEFINITION_VERSION);
+        }
+        try (var second = context("replacementBean", InitialTaskBean.class)) { processor(second).registerJobs(); }
+        assertThat(scheduler.getJobDetail(JobKey.jobKey("reconcileTask")).getJobDataMap()
+                .getString(CoQuartzConstants.DEFINITION_VERSION)).isNotEqualTo(original);
+    }
+
+    @Test
+    void liveSchedulerCannotBeRescannedIntoPartiallyUpdatedMethodBindings() throws Exception {
+        scheduler = newScheduler(); scheduler.start();
+        try (var context = context("versionedTaskBean", InitialTaskBean.class)) {
+            assertThatThrownBy(() -> processor(context).registerJobs())
+                    .isInstanceOf(CoQuartzConfigurationException.class).hasMessageContaining("standby");
+        }
+    }
+
+    @Test
+    void explicitRetirementPlanPreviewsAndRemovesOnlyMatchingNamespace() throws Exception {
+        scheduler = newScheduler();
+        JobKey key = JobKey.jobKey("reconcileTask");
+        try (var context = context("versionedTaskBean", InitialTaskBean.class)) { processor(context).registerJobs(); }
+        var wrong = new DefinitionMigrationPlan("other-app", java.util.Set.of(key));
+        assertThatThrownBy(() -> wrong.preview(scheduler)).isInstanceOf(CoQuartzConfigurationException.class);
+        assertThat(scheduler.checkExists(key)).isTrue();
+        var plan = new DefinitionMigrationPlan("default", java.util.Set.of(key));
+        assertThat(plan.preview(scheduler)).containsExactly(key);
+        assertThat(scheduler.checkExists(key)).isTrue();
+        assertThat(plan.apply(scheduler)).containsExactly(key);
+        assertThat(plan.apply(scheduler)).isEmpty();
+    }
+
     private Scheduler newScheduler() throws Exception {
         Properties properties = new Properties();
         properties.setProperty("org.quartz.scheduler.instanceName", "reconcile-" + System.nanoTime());

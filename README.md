@@ -379,3 +379,7 @@ mvn verify -Pintegration-tests
 异步日志采用单消费者、容量或时间触发的 JDBC batch；批次事务失败后回滚，再隔离逐行失败，同身份同结果的重复 ID 可幂等接受。关闭先停止接收，最多等待 shutdown-flush-timeout-ms；超时后 queued 与 in-flight 均计入 unflushed，驱动忽略取消时后台写入仍可能继续。状态快照增加 accepted/persisted/in-flight，拒收和重排队失败计入 dropped，失败重试有上限且无额外无界 ID 缓存。默认日志 JdbcTemplate SQL 超时为 5 秒；连接获取/socket 超时仍需配置 DataSource/驱动。
 
 生产告警执行器使用单线程和容量 256 的有界队列，满时拒绝并增加 `AlertEventPublisher.getDroppedCount()`；不会通过 CallerRunsPolicy 阻塞任务。相同 job/type 的普通失败、日志管道和审计失败事件在 1 秒内合并，可查询 getCoalescedCount()。连续失败状态限 1024 任务、1 小时 TTL，成功清除；仅是本节点窗口，容量淘汰可能重新开始计数。自动配置下审计失败事件也走这个异步通道，存储主异常不受监听器异常影响。手工构造 publisher 且不提供 executor 的旧构造器保持同步兼容。
+
+定义协调仅支持启动或 Scheduler standby 阶段；共享 JDBC 集群更新必须停止/standby 所有节点并采用单写者部署，当前不支持混合版本节点同时协调定义，也不把内容 fingerprint 当发布顺序。暂停后换计划同样要求集群协调停机，单节点 pause-restore 标记不能代替分布式原子更新。定义指纹包含方法 beanName/methodName。
+
+方法删除/重命名不会自动删除未扫描到的任务。使用显式 `DefinitionMigrationPlan(namespace, retiredJobKeys)`：先 preview 检查所有权，再在所有节点停止/standby、单执行者条件下 apply。仅匹配 namespace 且 code-owned 的任务可移除；legacy 无 namespace 需先同版本协调补元数据。可将旧任务保留为 enabled=false 的 tombstone 完成迁移。

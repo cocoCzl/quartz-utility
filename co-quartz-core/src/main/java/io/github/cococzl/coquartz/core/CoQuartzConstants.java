@@ -25,6 +25,9 @@ public final class CoQuartzConstants {
     public static final String METADATA_VERSION = PREFIX + "metadataVersion";
     public static final String JOB_FINGERPRINT = PREFIX + "jobFingerprint";
     public static final String SCHEDULE_FINGERPRINT = PREFIX + "scheduleFingerprint";
+    public static final String APPLICATION_NAMESPACE = PREFIX + "applicationNamespace";
+    public static final String METHOD_BEAN = PREFIX + "methodBean";
+    public static final String METHOD_NAME = PREFIX + "methodName";
     public static final String DEFINITION_VERSION = PREFIX + "definitionVersion";
     public static final String PAUSE_RESTORE_PENDING = PREFIX + "pauseRestorePending";
     /** Original application Job class when Quartz schedules the non-concurrent proxy. */
