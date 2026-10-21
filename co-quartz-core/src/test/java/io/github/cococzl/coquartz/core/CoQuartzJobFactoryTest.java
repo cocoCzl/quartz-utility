@@ -30,7 +30,6 @@ class CoQuartzJobFactoryTest {
 
     private CoQuartzJobFactory jobFactory;
 
-    @Mock
     private AutowireCapableBeanFactory beanFactory;
 
     @Mock
@@ -58,6 +57,7 @@ class CoQuartzJobFactoryTest {
 
     @BeforeEach
     void setUp() {
+        beanFactory = new org.springframework.beans.factory.support.DefaultListableBeanFactory();
         properties = new CoQuartzProperties();
         when(asyncTaskLogServiceProvider.getIfAvailable()).thenReturn(asyncTaskLogService);
         when(alertEventPublisherProvider.getIfAvailable()).thenReturn(alertEventPublisher);
@@ -189,13 +189,13 @@ class CoQuartzJobFactoryTest {
     }
 
     @Test
-    void autowiresBean() throws Exception {
+    void createsFreshExecutionInstance() throws Exception {
         JobDataMap jobDataMap = new JobDataMap();
         TriggerFiredBundle bundle = createBundle(jobDataMap);
 
-        jobFactory.createJobInstance(bundle);
-
-        verify(beanFactory).autowireBean(any());
+        Object first = jobFactory.createJobInstance(bundle);
+        Object second = jobFactory.createJobInstance(bundle);
+        assertThat(first).isNotSameAs(second);
     }
 
     @Test

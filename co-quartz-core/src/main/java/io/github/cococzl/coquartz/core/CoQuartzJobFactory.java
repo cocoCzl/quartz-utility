@@ -23,6 +23,7 @@ public class CoQuartzJobFactory extends SpringBeanJobFactory {
     private static final Logger log = LoggerFactory.getLogger(CoQuartzJobFactory.class);
 
     private AutowireCapableBeanFactory beanFactory;
+    private SchedulerContext schedulerContext;
     private ObjectProvider<AsyncTaskLogService> asyncTaskLogServiceProvider;
     private ObjectProvider<TaskExecutionLogWriter> taskExecutionLogWriterProvider;
     private ExecutorService timeoutExecutor;
@@ -74,11 +75,31 @@ public class CoQuartzJobFactory extends SpringBeanJobFactory {
     @Override
     protected Object createJobInstance(TriggerFiredBundle bundle) throws Exception {
         JobDataMap jobDataMap = bundle.getJobDetail().getJobDataMap();
-        Object job = createDelegateJobInstance(bundle, jobDataMap);
-
-        if (beanFactory != null) {
-            beanFactory.autowireBean(job);
+        Class<?> jobType = bundle.getJobDetail().getJobClass();
+        String delegateName = jobDataMap.getString(CoQuartzConstants.DELEGATE_JOB_CLASS);
+        if (delegateName != null && !delegateName.isBlank()) {
+            jobType = Class.forName(delegateName, true, jobType.getClassLoader());
         }
+        if (!Job.class.isAssignableFrom(jobType)) throw new SchedulerException("Delegate is not a Quartz Job");
+        Object target;
+        if (beanFactory != null) {
+            target = beanFactory.autowire(jobType, AutowireCapableBeanFactory.AUTOWIRE_CONSTRUCTOR, false);
+            beanFactory.autowireBean(target);
+        } else {
+            var constructor = jobType.getDeclaredConstructor();
+            constructor.setAccessible(true);
+            target = constructor.newInstance();
+        }
+        var values = new org.springframework.beans.MutablePropertyValues();
+        if (schedulerContext != null) values.addPropertyValues(schedulerContext);
+        values.addPropertyValues(jobDataMap);
+        values.addPropertyValues(bundle.getTrigger().getJobDataMap());
+        org.springframework.beans.PropertyAccessorFactory.forBeanPropertyAccess(target).setPropertyValues(values, true);
+        Object initialized = beanFactory == null ? target : beanFactory.initializeBean(target,
+                jobType.getName() + "#quartz-" + java.util.UUID.randomUUID());
+        ManagedJob job = new ManagedJob((Job) initialized, target, () -> {
+            if (beanFactory != null) beanFactory.destroyBean(target);
+        });
 
         TaskExecutionLogWriter logWriter = taskExecutionLogWriterProvider != null
                 ? taskExecutionLogWriterProvider.getIfAvailable() : null;
@@ -94,28 +115,19 @@ public class CoQuartzJobFactory extends SpringBeanJobFactory {
         boolean enhanced = isEnhancedJob(jobDataMap);
         if (enhanced || (properties != null && properties.getLog().isReliableAudit())) {
             log.debug("Wrapping job {} with EnhancedJob", bundle.getJobDetail().getKey());
-            return new EnhancedJob((Job) job, enhanced ? jobDataMap : new JobDataMap(), logWriter, timeoutExecutor, alertEventPublisher,
-                    properties, metrics, logSanitizer, reliableAuditService);
+            EnhancedJob decorated = new EnhancedJob(job, enhanced ? jobDataMap : new JobDataMap(), logWriter,
+                    timeoutExecutor, alertEventPublisher, properties, metrics, logSanitizer, reliableAuditService);
+            decorated.setCleanup(job::close);
+            return decorated;
         }
 
         return job;
     }
 
-    private Object createDelegateJobInstance(TriggerFiredBundle bundle, JobDataMap jobDataMap) throws Exception {
-        String delegateClassName = jobDataMap.getString(CoQuartzConstants.DELEGATE_JOB_CLASS);
-        if (delegateClassName == null || delegateClassName.isBlank()) {
-            return super.createJobInstance(bundle);
-        }
-        ClassLoader classLoader = bundle.getJobDetail().getJobClass().getClassLoader();
-        Class<?> delegateClass = Class.forName(delegateClassName, true, classLoader);
-        if (!Job.class.isAssignableFrom(delegateClass)) {
-            throw new SchedulerException("Configured non-concurrent delegate is not a Quartz Job: " + delegateClassName);
-        }
-        java.lang.reflect.Constructor<?> constructor = delegateClass.getDeclaredConstructor();
-        if (!constructor.canAccess(null)) {
-            constructor.setAccessible(true);
-        }
-        return constructor.newInstance();
+    @Override
+    public void setSchedulerContext(SchedulerContext schedulerContext) {
+        super.setSchedulerContext(schedulerContext);
+        this.schedulerContext = schedulerContext;
     }
 
     private boolean isEnhancedJob(JobDataMap jobDataMap) {

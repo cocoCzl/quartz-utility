@@ -367,3 +367,5 @@ mvn verify -Pintegration-tests
 | 增强任务 refireImmediately | 使用框架有限延迟重试，禁止两套重试循环；普通原生未增强任务维持 Quartz 原义 |
 
 无限忽略中断的业务可能无限占用工作线程，并阻止 `shutdown(wait=true)` 完成。集群不通过 JVM 本地锁控制并发。可靠审计必须使用 `CoQuartzJobFactory` 的受控执行装饰层，JobListener 不负责阻断任务。
+
+传统 Job 由 `CoQuartzJobFactory` 每次创建独立实例：构造器自动注入、字段注入、SchedulerContext → JobDataMap → Trigger 数据属性绑定、初始化与 BeanPostProcessor 代理，再执行并销毁目标实例。不会复用已扫描的 singleton Job。方法任务继续调用原 Spring bean。自定义 JobFactory 不会自动继承这些能力；自定义 Scheduler 必须显式安装 CoQuartzJobFactory，不能直接执行持久化 marker wrapper。

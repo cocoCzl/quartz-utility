@@ -21,6 +21,9 @@ import java.util.concurrent.*;
 public class EnhancedJob implements InterruptableJob {
 
     private volatile Thread executionThread;
+    private Runnable cleanup = () -> { };
+
+    void setCleanup(Runnable cleanup) { this.cleanup = cleanup; }
 
     private static final Logger log = LoggerFactory.getLogger(EnhancedJob.class);
 
@@ -95,6 +98,11 @@ public class EnhancedJob implements InterruptableJob {
 
     @Override
     public void execute(JobExecutionContext context) throws JobExecutionException {
+        try { executeInternal(context); }
+        finally { cleanup.run(); }
+    }
+
+    private void executeInternal(JobExecutionContext context) throws JobExecutionException {
         executionThread = Thread.currentThread();
         int retryTimes = getIntConfig(CoQuartzConstants.RETRY_TIMES, 0);
         long retryInterval = getLongConfig(CoQuartzConstants.RETRY_INTERVAL, 1000);
