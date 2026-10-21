@@ -49,12 +49,7 @@ public class CoQuartzScheduler {
 
     public boolean deleteJob(String jobName, String jobGroup) throws SchedulerException {
         JobKey jobKey = SchedulerCore.getJobKey(jobName, jobGroup);
-        JobDetail jobDetail = scheduler.getJobDetail(jobKey);
-        if (jobDetail != null && Boolean.parseBoolean(jobDetail.getJobDataMap()
-                .getString(CoQuartzConstants.CODE_OWNED))) {
-            throw new CodeOwnedTaskModificationException("Task " + jobKey
-                    + " is owned by application code; modify its code definition instead of using the management API");
-        }
+        TaskIdentityPolicy.assertMutable(scheduler.getJobDetail(jobKey));
         return scheduler.deleteJob(jobKey);
     }
 

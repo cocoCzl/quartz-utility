@@ -62,6 +62,8 @@ public class TaskAdminService {
                                MisfirePolicy misfirePolicy) throws SchedulerException {
         assertDefinitionIsMutable(JobKey.jobKey(jobName, jobGroup));
         TriggerKey triggerKey = TriggerKey.triggerKey(triggerName, triggerGroup);
+        io.github.cococzl.coquartz.core.TaskIdentityPolicy.assertTriggerTarget(scheduler, triggerKey,
+                JobKey.jobKey(jobName, jobGroup));
         Trigger newTrigger = QuartzTriggerFactory.build(
                 triggerName, triggerGroup, cronExpression, 0, timeZone, misfirePolicy,
                 null, null, JobKey.jobKey(jobName, jobGroup));
@@ -77,6 +79,8 @@ public class TaskAdminService {
                                    int intervalSeconds, MisfirePolicy misfirePolicy) throws SchedulerException {
         assertDefinitionIsMutable(JobKey.jobKey(jobName, jobGroup));
         TriggerKey triggerKey = TriggerKey.triggerKey(triggerName, triggerGroup);
+        io.github.cococzl.coquartz.core.TaskIdentityPolicy.assertTriggerTarget(scheduler, triggerKey,
+                JobKey.jobKey(jobName, jobGroup));
         Trigger newTrigger = QuartzTriggerFactory.build(
                 triggerName, triggerGroup, "", intervalSeconds,
                 CoQuartzConstants.DEFAULT_TIME_ZONE, misfirePolicy,
@@ -85,11 +89,6 @@ public class TaskAdminService {
     }
 
     private void assertDefinitionIsMutable(JobKey jobKey) throws SchedulerException {
-        JobDetail jobDetail = scheduler.getJobDetail(jobKey);
-        if (jobDetail != null && Boolean.parseBoolean(jobDetail.getJobDataMap()
-                .getString(CoQuartzConstants.CODE_OWNED))) {
-            throw new CodeOwnedTaskModificationException("Task " + jobKey
-                    + " is owned by application code; modify its code definition instead of using the management API");
-        }
+        io.github.cococzl.coquartz.core.TaskIdentityPolicy.assertMutable(scheduler.getJobDetail(jobKey));
     }
 }

@@ -15,7 +15,7 @@ public class QuartzTaskBuilder {
     private String jobName;
     private String jobGroup = CoQuartzConstants.DEFAULT_GROUP;
     private String triggerName;
-    private String triggerGroup = CoQuartzConstants.DEFAULT_GROUP;
+    private String triggerGroup;
     private String description;
     private Map<String, Object> jobData = new HashMap<>();
     private String cronExpression;
@@ -156,6 +156,8 @@ public class QuartzTaskBuilder {
             Trigger trigger = buildTrigger();
 
             JobDetail previous = scheduler.getJobDetail(jobDetail.getKey());
+            TaskIdentityPolicy.assertDynamic(previous);
+            TaskIdentityPolicy.assertTriggerTarget(scheduler, trigger.getKey(), jobDetail.getKey());
             if (previous == null) return scheduler.scheduleJob(jobDetail, trigger);
             boolean paused = previous != null
                     && scheduler.getTriggerState(trigger.getKey()) == Trigger.TriggerState.PAUSED;
@@ -184,7 +186,7 @@ public class QuartzTaskBuilder {
         try {
             JobDetail jobDetail = buildJobDetail();
             Trigger trigger = TriggerBuilder.newTrigger()
-                    .withIdentity(triggerName != null ? triggerName : "TRIGGER_NOW_" + jobName, triggerGroup)
+                    .withIdentity(triggerName != null ? triggerName : "TRIGGER_NOW_" + jobName + "_" + java.util.UUID.randomUUID(), effectiveTriggerGroup())
                     .startNow()
                     .forJob(jobDetail.getKey())
                     .build();
@@ -192,7 +194,7 @@ public class QuartzTaskBuilder {
             if (!scheduler.checkExists(jobDetail.getKey())) {
                 return scheduler.scheduleJob(jobDetail, trigger);
             }
-            return scheduler.scheduleJob(trigger);
+            throw new CoQuartzSchedulingException("Task already exists; use Scheduler.triggerJob to execute its stored definition");
         } catch (SchedulerException e) {
             throw new CoQuartzSchedulingException("Failed to execute job now: " + jobName, e);
         }
@@ -206,6 +208,13 @@ public class QuartzTaskBuilder {
             jobName = jobClass.getSimpleName();
         }
 
+        TaskIdentityPolicy.assertPublicGroup(jobGroup);
+        TaskIdentityPolicy.assertPublicGroup(effectiveTriggerGroup());
+        for (String key : jobData.keySet()) {
+            if (key.startsWith(CoQuartzConstants.PREFIX)) {
+                throw new CoQuartzSchedulingException("Reserved task data key: " + key);
+            }
+        }
         Map<String, Object> allData = new HashMap<>(jobData);
         allData.put(CoQuartzConstants.OWNER, CoQuartzConstants.OWNER_VALUE);
         allData.put(CoQuartzConstants.CODE_OWNED, "false");
@@ -242,7 +251,7 @@ public class QuartzTaskBuilder {
         try {
             return QuartzTriggerFactory.build(
                     tName,
-                    triggerGroup,
+                    effectiveTriggerGroup(),
                     cronExpression,
                     intervalSeconds,
                     effectiveTimeZone(),
@@ -254,6 +263,8 @@ public class QuartzTaskBuilder {
             throw new CoQuartzSchedulingException(e.getMessage(), e);
         }
     }
+
+    private String effectiveTriggerGroup() { return triggerGroup == null ? jobGroup : triggerGroup; }
 
     private String effectiveTimeZone() {
         return timeZone == null || timeZone.isBlank()

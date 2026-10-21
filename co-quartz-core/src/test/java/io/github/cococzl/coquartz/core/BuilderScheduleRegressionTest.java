@@ -37,4 +37,44 @@ class BuilderScheduleRegressionTest {
         assertThat(scheduler.getTriggerState(TriggerKey.triggerKey("TRIGGER_update")))
                 .isEqualTo(Trigger.TriggerState.PAUSED);
     }
+    @Test void differentGroupsCanUseSameDefaultNames() throws Exception {
+        builder("same").jobGroup("first").schedule(scheduler());
+        builder("same").jobGroup("second").schedule(scheduler);
+        assertThat(scheduler.getTrigger(TriggerKey.triggerKey("TRIGGER_same", "first")).getJobKey())
+                .isEqualTo(JobKey.jobKey("same", "first"));
+        assertThat(scheduler.getTrigger(TriggerKey.triggerKey("TRIGGER_same", "second")).getJobKey())
+                .isEqualTo(JobKey.jobKey("same", "second"));
+    }
+
+    @Test void builderCannotOverwriteCodeOwnedOrExternalTasks() throws Exception {
+        for (boolean codeOwned : new boolean[]{true, false}) {
+            String name = codeOwned ? "code" : "external";
+            var data = new JobDataMap();
+            data.put(CoQuartzConstants.CODE_OWNED, String.valueOf(codeOwned));
+            data.put(CoQuartzConstants.OWNER, codeOwned ? CoQuartzConstants.OWNER_VALUE : "external");
+            var original = JobBuilder.newJob(SampleJob.class).withIdentity(name).storeDurably()
+                    .usingJobData(data).build();
+            scheduler().addJob(original, false);
+            assertThatThrownBy(() -> builder(name).durable(true).schedule(scheduler))
+                    .isInstanceOf(RuntimeException.class).hasMessageContaining("owned");
+            assertThat(scheduler.getJobDetail(original.getKey()).getJobDataMap()).isEqualTo(data);
+        }
+    }
+
+    @Test void triggerConflictDoesNotMutateEitherJob() throws Exception {
+        builder("first").triggerName("shared").durable(true).jobData("payload", "original").schedule(scheduler());
+        builder("second").durable(true).schedule(scheduler);
+        assertThatThrownBy(() -> builder("second").triggerName("shared").jobData("payload", "wrong")
+                .schedule(scheduler)).isInstanceOf(RuntimeException.class);
+        assertThat(scheduler.getTrigger(TriggerKey.triggerKey("shared")).getJobKey()).isEqualTo(JobKey.jobKey("first"));
+        assertThat(scheduler.getJobDetail(JobKey.jobKey("first")).getJobDataMap().getString("payload")).isEqualTo("original");
+        assertThat(scheduler.getJobDetail(JobKey.jobKey("second")).getJobDataMap()).doesNotContainKey("payload");
+    }
+
+    @Test void executeNowCreatesOnlyAndExistingExecutionMustBeExplicit() throws Exception {
+        builder("once").executeNow(scheduler());
+        assertThatThrownBy(() -> builder("once").jobData("ignored", "data").executeNow(scheduler))
+                .isInstanceOf(RuntimeException.class).hasMessageContaining("triggerJob");
+    }
+
 }
