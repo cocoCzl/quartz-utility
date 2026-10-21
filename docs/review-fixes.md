@@ -127,3 +127,11 @@ fingerprint v2 加入 beanName/methodName 并存储绑定元数据、应用 name
 确认成立。跨 schema 元数据回归修复前失败，独立版本脚本回归修复前缺资源。补各方言 V1 旧基线建表、V2 增列/索引及已有 V3；自动 metadata 限定当前 catalog/schema。`mvn -q -pl co-quartz-jdbc -am -Dtest=SchemaInitializerTest -Dsurefire.failIfNoSpecifiedTests=false test`：7 通过，包含 H2 原生及 MySQL/PostgreSQL 兼容模式脚本升级并保留旧数据。
 
 README 明确单迁移者、非幂等脚本、部分失败恢复、Flyway/Liquibase/部署工具、无应用 DDL 权限路径；未声称兼容模式等于真实三方言验证，真实 MySQL/PostgreSQL 待集成环境。
+
+## R19
+
+确认成立。慢数据库指标抓取回归修复前耗时 305ms、失败；并发标签预算场景也加入验证。`mvn -q -pl co-quartz-core -Dtest=CoQuartzMetricsTest,CoQuartzJobListenerTest,AlertEventPublisherTest,AlertEventPublisherAsyncTest,EnhancedJobTest test`：41 通过。
+
+标签同步准入；原生观察路径增加 active 成对计数、连续失败和慢任务事件；审计指标独立后台刷新、缓存/失败计数/样本年龄，不在 scrape 访问数据库。告警关联跨异步 dispatch 保留并清理 ThreadLocal，补节点/attempt/finalAttempt。自动配置绑定告警丢弃和合并 gauge。文档明确尝试计数、节点本地连续失败完成顺序以及非集群聚合。
+
+未验证：真实网络故障/无限 JDBC 驱动挂起；采样线程 daemon 且 close 请求取消，不强制终止第三方驱动。

@@ -42,6 +42,26 @@ class AlertEventPublisherAsyncTest {
     }
 
     @Test
+    void asynchronousFailureEventKeepsAttemptCorrelationAfterCallerClearsContext() throws Exception {
+        var executor = Executors.newSingleThreadExecutor();
+        try {
+            var delivered = new CountDownLatch(1);
+            var result = new java.util.concurrent.atomic.AtomicReference<TaskFailureEvent>();
+            var publisher = new AlertEventPublisher(event -> {
+                if (event instanceof TaskFailureEvent failure) result.set(failure);
+                delivered.countDown();
+            }, new CoQuartzProperties(), executor);
+            var entry = new io.github.cococzl.coquartz.dto.TaskExecutionLog();
+            entry.setExecutionId("execution-42"); entry.setAttempt(2); entry.setSchedulerInstanceId("node-a"); entry.setFinalAttempt(true);
+            publisher.setExecutionCorrelation(entry);
+            publisher.publishFailure("job", "failure", null);
+            publisher.clearExecutionCorrelation();
+            assertThat(delivered.await(1, TimeUnit.SECONDS)).isTrue();
+            assertThat(result.get().getCorrelation()).isEqualTo(new TaskExecutionCorrelation("execution-42", 2, "node-a", true));
+        } finally { executor.shutdownNow(); }
+    }
+
+    @Test
     void slowListenerDoesNotBlockCallerAndConsecutiveWindowAlertsOnceThenResets() throws Exception {
         ExecutorService executor = Executors.newSingleThreadExecutor();
         try {

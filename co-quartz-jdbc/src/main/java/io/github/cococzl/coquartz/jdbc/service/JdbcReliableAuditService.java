@@ -62,7 +62,12 @@ public class JdbcReliableAuditService implements ReliableAuditService {
     }
 
     private void publish(TaskExecutionLog log, ReliableAuditFailureEvent.Phase phase) {
-        if (alerts != null) { alerts.publishAuditFailure(log.getJobKey(), phase); return; }
+        if (alerts != null) {
+            alerts.setExecutionCorrelation(log);
+            try { alerts.publishAuditFailure(log.getJobKey(), phase); }
+            finally { alerts.clearExecutionCorrelation(); }
+            return;
+        }
         if (eventPublisher == null) return;
         try {
             eventPublisher.publishEvent(new ReliableAuditFailureEvent(this, log.getJobKey(), phase));

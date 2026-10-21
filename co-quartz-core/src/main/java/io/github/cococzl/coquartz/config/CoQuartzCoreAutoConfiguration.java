@@ -173,9 +173,10 @@ public class CoQuartzCoreAutoConfiguration {
     public AlertEventPublisher alertEventPublisher(ApplicationEventPublisher eventPublisher,
                                                      CoQuartzProperties properties,
                                                      @Qualifier("coQuartzAlertExecutor") java.util.concurrent.Executor alertExecutor,
-                                                     LogSanitizer sanitizer) {
+                                                     LogSanitizer sanitizer, ObjectProvider<CoQuartzMetrics> metrics) {
         AlertEventPublisher publisher = new AlertEventPublisher(eventPublisher, properties, alertExecutor);
         publisher.setLogSanitizer(sanitizer);
+        if (metrics.getIfAvailable() != null) metrics.getIfAvailable().bindAlerts(publisher);
         return publisher;
     }
 

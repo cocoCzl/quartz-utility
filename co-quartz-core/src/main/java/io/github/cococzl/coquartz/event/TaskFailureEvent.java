@@ -2,7 +2,7 @@ package io.github.cococzl.coquartz.event;
 
 import org.springframework.context.ApplicationEvent;
 
-public class TaskFailureEvent extends ApplicationEvent {
+public class TaskFailureEvent extends CorrelatedTaskEvent {
 
     private final String jobKey;
     private final String errorMessage;

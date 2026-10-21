@@ -14,6 +14,12 @@ public class AlertEventPublisher {
     private static final Logger log = LoggerFactory.getLogger(AlertEventPublisher.class);
 
     private final ApplicationEventPublisher eventPublisher;
+    private final ThreadLocal<TaskExecutionCorrelation> execution = new ThreadLocal<>();
+    public void setExecutionCorrelation(io.github.cococzl.coquartz.dto.TaskExecutionLog log) {
+        execution.set(new TaskExecutionCorrelation(log.getExecutionId(), log.getAttempt(), log.getSchedulerInstanceId(), log.isFinalAttempt()));
+    }
+    public void clearExecutionCorrelation() { execution.remove(); }
+    private void emit(CorrelatedTaskEvent event) { event.setCorrelation(execution.get()); eventPublisher.publishEvent(event); }
     private final CoQuartzProperties properties;
     private final Executor executor;
     private io.github.cococzl.coquartz.service.LogSanitizer sanitizer = new io.github.cococzl.coquartz.service.DefaultLogSanitizer();
@@ -50,7 +56,7 @@ public class AlertEventPublisher {
 
     public void publishFailure(String jobKey, String errorMessage, String stackTrace) {
         dispatch(() -> {
-            eventPublisher.publishEvent(new TaskFailureEvent(this, jobKey, sanitizer.sanitize(errorMessage), properties.getLog().isCaptureStackTrace() ? sanitizer.sanitize(stackTrace) : null));
+            emit(new TaskFailureEvent(this, jobKey, sanitizer.sanitize(errorMessage), properties.getLog().isCaptureStackTrace() ? sanitizer.sanitize(stackTrace) : null));
         }, "TaskFailureEvent", jobKey);
     }
 
@@ -60,14 +66,14 @@ public class AlertEventPublisher {
 
     public void publishTimeout(String jobKey, long timeoutMs, boolean terminationConfirmed) {
         dispatch(() -> {
-            eventPublisher.publishEvent(new TaskTimeoutEvent(this, jobKey, timeoutMs, terminationConfirmed));
+            emit(new TaskTimeoutEvent(this, jobKey, timeoutMs, terminationConfirmed));
         }, "TaskTimeoutEvent", jobKey);
     }
 
     public void publishSlowTask(String jobKey, long executionTimeMs, long thresholdMs) {
         if (!properties.getMonitoring().isEnabled()) return;
         dispatch(() -> {
-            eventPublisher.publishEvent(new TaskSlowEvent(this, jobKey, executionTimeMs, thresholdMs));
+            emit(new TaskSlowEvent(this, jobKey, executionTimeMs, thresholdMs));
         }, "TaskSlowEvent", jobKey);
     }
 
@@ -80,7 +86,7 @@ public class AlertEventPublisher {
         expireWindows();
         int failures = window.failures.incrementAndGet();
         if (failures >= threshold && window.alerted.compareAndSet(false, true)) {
-            dispatch(() -> eventPublisher.publishEvent(new TaskConsecutiveFailureEvent(this, jobKey, threshold, failures)),
+            dispatch(() -> emit(new TaskConsecutiveFailureEvent(this, jobKey, threshold, failures)),
                     "TaskConsecutiveFailureEvent", jobKey);
         }
     }
@@ -88,12 +94,12 @@ public class AlertEventPublisher {
     public synchronized void recordSuccess(String jobKey) { failureWindows.remove(jobKey); }
 
     public void publishLogPipeline(TaskLogPipelineEvent.Type type, long count) {
-        dispatch(() -> eventPublisher.publishEvent(new TaskLogPipelineEvent(this, type, count)),
+        dispatch(() -> emit(new TaskLogPipelineEvent(this, type, count)),
                 "TaskLogPipelineEvent", "log-pipeline");
     }
 
     public void publishAuditFailure(String jobKey, ReliableAuditFailureEvent.Phase phase) {
-        dispatch(() -> eventPublisher.publishEvent(new ReliableAuditFailureEvent(this, jobKey, phase)),
+        dispatch(() -> emit(new ReliableAuditFailureEvent(this, jobKey, phase)),
                 "ReliableAuditFailureEvent-" + phase, jobKey);
     }
 
@@ -110,9 +116,13 @@ public class AlertEventPublisher {
                 lastDispatch.put(identity, now);
             }
         }
+        TaskExecutionCorrelation captured = execution.get();
         try {
             executor.execute(() -> {
+                TaskExecutionCorrelation previous = execution.get();
+                execution.set(captured);
                 try { action.run(); } catch (Exception e) { log.error("Failed to publish {} for job: {}: {}", eventName, sanitizer.sanitize(jobKey), sanitizer.sanitize(e.getMessage())); }
+                finally { if (previous == null) execution.remove(); else execution.set(previous); }
             });
         } catch (Exception e) { dropped.incrementAndGet(); log.error("Failed to dispatch {} for job: {}: {}", eventName, sanitizer.sanitize(jobKey), sanitizer.sanitize(e.getMessage())); }
     }

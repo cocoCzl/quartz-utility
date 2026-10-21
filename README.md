@@ -391,3 +391,5 @@ mvn verify -Pintegration-tests
 任务级策略统一边界：retryTimes=0..1000、retryInterval=0..60000ms、backoffMultiplier 为有限的 1..100、timeout=0..604800000ms。注解、Builder 和 RetryContext 一致校验；动态 jobData 采用重试快照的可持久化类型/大小约束且禁止 co-quartz 保留键。Boot 自动配置明确拒绝 Quartz useProperties=true（内部元数据需要类型值）；自建 Scheduler 也必须保持该选项为 false。方法任务不支持 @Async（包括类级），会在注册时拒绝；cron/timeZone 仍为字面值，`${...}` 环境配置扩展不在此次缺陷修复中。
 
 独立生产迁移位于 `co-quartz-jdbc/src/main/resources/db/migration/{h2,mysql,postgresql}`：新库顺序 V1→V2→V3；已有旧基线表先备份和核对列，跳过 V1，再执行尚未完成的版本。已包含 V2 列的库只执行 V3。脚本交给 Flyway/Liquibase/部署系统单执行者管理，应用无需 DDL 权限，关闭 auto-create-table。脚本不是任意重复执行安全的；尤其 MySQL DDL 可能隐式提交，部分失败需核对实际列/索引、完成缺失步骤并由迁移工具修复版本记录，禁止盲目重跑。当前 schema-quartz-task-log-*.sql 是全量安装快照，不是旧表升级脚本。自动 Java DDL 只支持单迁移者启动，不支持多节点同时迁移。
+
+执行指标按单次尝试计数（含 retry），逻辑执行通过 executionId 关联，active 包含原生观察路径与增强路径；连续失败按本节点完成回调顺序统计，不是集群聚合。指标 job 标签准入同步限制上限，超额归入 other。审计 STARTED gauge 后台每 5 秒刷新，首次可为 NaN，同时提供 sample_age_seconds 和 refresh_failures，抓取不访问日志数据库。告警提供 correlation：executionId、attempt、schedulerInstanceId、finalAttempt；日志管道等非执行事件可为空。告警 dropped/coalesced 提供低基数 gauge。

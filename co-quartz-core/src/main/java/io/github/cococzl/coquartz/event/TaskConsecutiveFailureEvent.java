@@ -2,7 +2,7 @@ package io.github.cococzl.coquartz.event;
 
 import org.springframework.context.ApplicationEvent;
 
-public class TaskConsecutiveFailureEvent extends ApplicationEvent {
+public class TaskConsecutiveFailureEvent extends CorrelatedTaskEvent {
 
     private final String jobKey;
     private final int threshold;

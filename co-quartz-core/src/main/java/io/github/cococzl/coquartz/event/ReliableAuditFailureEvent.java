@@ -3,7 +3,7 @@ package io.github.cococzl.coquartz.event;
 import org.springframework.context.ApplicationEvent;
 
 /** Signals a synchronous reliable-audit write failure without exposing diagnostic payloads. */
-public class ReliableAuditFailureEvent extends ApplicationEvent {
+public class ReliableAuditFailureEvent extends CorrelatedTaskEvent {
     public enum Phase { START, COMPLETE }
 
     private final String jobKey;

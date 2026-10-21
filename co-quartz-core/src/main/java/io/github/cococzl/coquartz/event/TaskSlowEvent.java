@@ -2,7 +2,7 @@ package io.github.cococzl.coquartz.event;
 
 import org.springframework.context.ApplicationEvent;
 
-public class TaskSlowEvent extends ApplicationEvent {
+public class TaskSlowEvent extends CorrelatedTaskEvent {
 
     private final String jobKey;
     private final long executionTimeMs;

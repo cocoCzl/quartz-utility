@@ -12,7 +12,13 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.ConcurrentHashMap;
 
-public class CoQuartzMetrics {
+public class CoQuartzMetrics implements AutoCloseable {
+    private final java.util.concurrent.ScheduledThreadPoolExecutor sampler = new java.util.concurrent.ScheduledThreadPoolExecutor(1,
+            task -> { Thread thread = new Thread(task, "co-quartz-metric-sampler"); thread.setDaemon(true); return thread; });
+    private volatile double cachedAuditStarted = Double.NaN;
+    private volatile long lastAuditRefresh;
+    private final java.util.concurrent.atomic.AtomicLong auditRefreshFailures = new java.util.concurrent.atomic.AtomicLong();
+    public void close() { sampler.shutdownNow(); }
 
     private final MeterRegistry meterRegistry;
     private final AtomicInteger activeJobs;
@@ -82,9 +88,14 @@ public class CoQuartzMetrics {
         Counter.builder(name).tag("job", job).register(meterRegistry).increment();
     }
 
-    private String metricJobKey(String jobKey) {
+    private synchronized String metricJobKey(String jobKey) {
         if (knownJobTags.contains(jobKey) || knownJobTags.size() < maxJobTags && knownJobTags.add(jobKey)) return jobKey;
         return "other";
+    }
+
+    public void bindAlerts(io.github.cococzl.coquartz.event.AlertEventPublisher alerts) {
+        Gauge.builder("co_quartz_alert_dropped", alerts, io.github.cococzl.coquartz.event.AlertEventPublisher::getDroppedCount).register(meterRegistry);
+        Gauge.builder("co_quartz_alert_coalesced", alerts, io.github.cococzl.coquartz.event.AlertEventPublisher::getCoalescedCount).register(meterRegistry);
     }
 
     public void bindLogPipeline(TaskExecutionLogWriter pipeline) {
@@ -96,6 +107,13 @@ public class CoQuartzMetrics {
     }
 
     public void bindReliableAudit(TaskLogRepository repository) {
-        Gauge.builder("co_quartz_audit_started", repository, TaskLogRepository::countStarted).register(meterRegistry);
+        Gauge.builder("co_quartz_audit_started", this, value -> value.cachedAuditStarted).register(meterRegistry);
+        Gauge.builder("co_quartz_audit_refresh_failures", auditRefreshFailures, java.util.concurrent.atomic.AtomicLong::get).register(meterRegistry);
+        Gauge.builder("co_quartz_audit_sample_age_seconds", this, value -> value.lastAuditRefresh == 0 ? Double.NaN
+                : (System.nanoTime() - value.lastAuditRefresh) / 1_000_000_000.0).register(meterRegistry);
+        sampler.scheduleWithFixedDelay(() -> {
+            try { cachedAuditStarted = repository.countStarted(); lastAuditRefresh = System.nanoTime(); }
+            catch (RuntimeException failure) { auditRefreshFailures.incrementAndGet(); }
+        }, 0, 5, java.util.concurrent.TimeUnit.SECONDS);
     }
 }

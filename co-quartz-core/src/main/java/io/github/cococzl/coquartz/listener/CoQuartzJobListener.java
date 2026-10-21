@@ -109,6 +109,12 @@ public class CoQuartzJobListener implements JobListener {
 
     @Override
     public void jobToBeExecuted(JobExecutionContext context) {
+        if (isEnhancedJob(context)) return;
+        try {
+            CoQuartzMetrics current = metrics();
+            if (current != null) { current.jobStarted(); context.put("co-quartz.observerActive", true); }
+            context.put("co-quartz.observerExecutionId", UUID.randomUUID().toString());
+        } catch (RuntimeException error) { log.error("Task observation start failed: {}", sanitize(error.getMessage(), 500)); }
         // Reliable audit is part of the controlled execution decorator, never a listener veto.
     }
 
@@ -118,10 +124,17 @@ public class CoQuartzJobListener implements JobListener {
 
     @Override
     public void jobWasExecuted(JobExecutionContext context, JobExecutionException jobException) {
+        if (isEnhancedJob(context)) return;
         try {
             observeCompletion(context, jobException);
         } catch (Exception error) {
             log.error("Task observation failed: {}", sanitize(error.getMessage(), 500));
+        } finally {
+            if (Boolean.TRUE.equals(context.get("co-quartz.observerActive"))) {
+                try { if (metrics() != null) metrics().jobFinished(); } catch (RuntimeException ignored) { }
+                context.put("co-quartz.observerActive", false);
+            }
+            if (alertPublisher() != null) alertPublisher().clearExecutionCorrelation();
         }
     }
 
@@ -150,6 +163,13 @@ public class CoQuartzJobListener implements JobListener {
                     ? sanitize(CoQuartzUtils.getStackTraceAsString(jobException), 4000) : null;
         }
 
+        String observerExecution = (String) context.get("co-quartz.observerExecutionId");
+        if (observerExecution == null) observerExecution = UUID.randomUUID().toString();
+        TaskExecutionLog correlation = new TaskExecutionLog();
+        correlation.setExecutionId(observerExecution); correlation.setAttempt(1); correlation.setFinalAttempt(true);
+        try { correlation.setSchedulerInstanceId(context.getScheduler() == null ? "unknown" : context.getScheduler().getSchedulerInstanceId()); }
+        catch (org.quartz.SchedulerException ignored) { correlation.setSchedulerInstanceId("unknown"); }
+        if (alertPublisher() != null) alertPublisher().setExecutionCorrelation(correlation);
         CoQuartzMetrics currentMetrics = metrics();
         AlertEventPublisher currentAlertPublisher = alertPublisher();
         if (currentMetrics != null) {
@@ -162,15 +182,18 @@ public class CoQuartzJobListener implements JobListener {
 
         if (currentAlertPublisher != null && execState == LogTaskExecStateEnum.FAIL) {
             currentAlertPublisher.publishFailure(jobKey, errorMessage, stackTrace);
+            currentAlertPublisher.publishConsecutiveFailureIfNeeded(jobKey);
         } else if (currentAlertPublisher != null) {
             currentAlertPublisher.recordSuccess(jobKey);
+            long threshold = properties.getMonitoring().getSlowTaskThresholdMs();
+            if (threshold > 0 && executionTimeMs > threshold) currentAlertPublisher.publishSlowTask(jobKey, executionTimeMs, threshold);
         }
 
         TaskExecutionLog taskLog = new TaskExecutionLog();
         taskLog.setId(UUID.randomUUID().toString());
         taskLog.setJobKey(jobKey);
         taskLog.setTriggerKey(triggerKey);
-        taskLog.setExecutionId(UUID.randomUUID().toString());
+        taskLog.setExecutionId(observerExecution);
         taskLog.setApplicationNamespace(properties.getScheduling().getApplicationNamespace());
         taskLog.setOriginTriggerKey(triggerKey);
         taskLog.setOriginScheduledTime(context.getScheduledFireTime() == null ? null : context.getScheduledFireTime().getTime());

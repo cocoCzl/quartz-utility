@@ -3,7 +3,7 @@ package io.github.cococzl.coquartz.event;
 import org.springframework.context.ApplicationEvent;
 
 /** Published when the best-effort execution-log pipeline drops or cannot persist records. */
-public class TaskLogPipelineEvent extends ApplicationEvent {
+public class TaskLogPipelineEvent extends CorrelatedTaskEvent {
     public enum Type { QUEUE_FULL, PERMANENT_WRITE_FAILURE, SHUTDOWN_UNFLUSHED }
 
     private final Type type;

@@ -99,7 +99,10 @@ public class EnhancedJob implements InterruptableJob {
     @Override
     public void execute(JobExecutionContext context) throws JobExecutionException {
         try { executeInternal(context); }
-        finally { cleanup.run(); }
+        finally {
+            if (alertEventPublisher != null) alertEventPublisher.clearExecutionCorrelation();
+            cleanup.run();
+        }
     }
 
     private void executeInternal(JobExecutionContext context) throws JobExecutionException {
@@ -195,6 +198,7 @@ public class EnhancedJob implements InterruptableJob {
                     taskLog = TaskExecutionLog.failure(jobKey, triggerKey, startTime, endTime, executionTimeMs, errorMessage, stackTrace, attempt, noMoreRetries);
                 }
                 populateExecutionCorrelation(taskLog, context, executionId);
+                if (alertEventPublisher != null) alertEventPublisher.setExecutionCorrelation(taskLog);
                 if (auditLog != null) {
                     taskLog.setId(auditLog.getId());
                     completeReliableAudit(taskLog);
