@@ -56,15 +56,7 @@ class QuartzJdbcRetryPersistenceTest {
     @Test
     void delayedRetrySurvivesSchedulerRestartAndKeepsItsExecutionCorrelation() throws Exception {
         Scheduler first = scheduler("first");
-        QuartzTaskBuilder.newBuilder()
-                .jobClass(FailOnceJob.class)
-                .jobName("persistentRetry")
-                .intervalInSeconds(3600)
-                .startAt(new java.util.Date(System.currentTimeMillis() + TimeUnit.HOURS.toMillis(1)))
-                .retryTimes(1)
-                .retryInterval(2_000)
-                .concurrent(false)
-                .schedule(first);
+        registerDeclarative(first);
         first.start();
         first.triggerJob(JobKey.jobKey("persistentRetry", "DEFAULT"));
         assertThat(FailOnceJob.firstAttempt.await(5, TimeUnit.SECONDS)).isTrue();
@@ -81,6 +73,7 @@ class QuartzJdbcRetryPersistenceTest {
         schedulers.remove(first);
 
         Scheduler restarted = scheduler("restarted");
+        registerDeclarative(restarted);
         restarted.start();
         assertThat(FailOnceJob.secondAttempt.await(8, TimeUnit.SECONDS)).isTrue();
 
@@ -146,6 +139,17 @@ class QuartzJdbcRetryPersistenceTest {
         }
     }
 
+    private void registerDeclarative(Scheduler scheduler) {
+        try (var context = new org.springframework.context.support.GenericApplicationContext()) {
+            context.registerBean("failOnce", FailOnceJob.class);
+            context.refresh();
+            new QuartzJobAnnotationProcessor(new CoQuartzScheduler(scheduler), context,
+                    new CoQuartzProperties()).registerJobs();
+        }
+    }
+
+    @io.github.cococzl.coquartz.annotation.QuartzJob(name = "persistentRetry",
+            cron = "0 0 0 1 1 ? 2099", retryTimes = 1, retryInterval = 2000)
     static class FailOnceJob implements Job {
         static final AtomicInteger executions = new AtomicInteger();
         static CountDownLatch firstAttempt;

@@ -328,6 +328,9 @@ public class EnhancedJob implements Job {
     private void scheduleRetry(JobExecutionContext context, String executionId, int nextAttempt, long delayMs)
             throws SchedulerException {
         JobDataMap data = new JobDataMap();
+        data.put(CoQuartzConstants.OWNER, CoQuartzConstants.OWNER_VALUE);
+        data.put(CoQuartzConstants.METADATA_VERSION, CoQuartzConstants.METADATA_VERSION_VALUE);
+        data.put(CoQuartzConstants.RETRY_JOB_KEY, context.getJobDetail().getKey().toString());
         data.put(CoQuartzConstants.RETRY_EXECUTION_ID, executionId);
         data.put(CoQuartzConstants.RETRY_ATTEMPT, nextAttempt);
         Trigger trigger = TriggerBuilder.newTrigger()

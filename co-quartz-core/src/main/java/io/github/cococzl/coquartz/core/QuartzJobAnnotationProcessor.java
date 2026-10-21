@@ -364,6 +364,12 @@ public class QuartzJobAnnotationProcessor implements SmartInitializingSingleton 
             return;
         }
 
+        for (Trigger pending : scheduler.getTriggersOfJob(jobKey)) {
+            if (InternalTriggers.isRetry(pending, jobKey)) {
+                scheduler.unscheduleJob(pending.getKey());
+                log.info("Cancelled retry {} because task definition changed: {}", pending.getKey(), jobKey);
+            }
+        }
         boolean mustRestorePause = pauseRestorePending
                 || (scheduleChanged && existingTrigger != null
                 && scheduler.getTriggerState(triggerKey) == Trigger.TriggerState.PAUSED);
@@ -415,8 +421,9 @@ public class QuartzJobAnnotationProcessor implements SmartInitializingSingleton 
         }
         List<? extends Trigger> jobTriggers = scheduler.getTriggersOfJob(jobKey);
         List<TriggerKey> unexpectedTriggerKeys = jobTriggers.stream()
+                .filter(trigger -> !triggerKey.equals(trigger.getKey()))
+                .filter(trigger -> !InternalTriggers.isRetry(trigger, jobKey))
                 .map(Trigger::getKey)
-                .filter(key -> !triggerKey.equals(key))
                 .toList();
         if (!unexpectedTriggerKeys.isEmpty()) {
             throw new CoQuartzConfigurationException("Code-owned task " + jobKey
