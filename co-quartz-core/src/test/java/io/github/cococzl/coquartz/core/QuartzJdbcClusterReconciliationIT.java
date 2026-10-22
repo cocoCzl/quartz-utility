@@ -6,6 +6,7 @@ import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.condition.EnabledIfSystemProperty;
+import org.junit.jupiter.api.io.TempDir;
 import org.quartz.JobKey;
 import org.quartz.Scheduler;
 import org.quartz.Trigger;
@@ -16,6 +17,8 @@ import org.springframework.context.support.GenericApplicationContext;
 
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.SQLException;
@@ -39,6 +42,8 @@ class QuartzJdbcClusterReconciliationIT {
     private static final String DATABASE = "co_quartz_task4_it";
 
     private final List<Scheduler> schedulers = new ArrayList<>();
+    @TempDir
+    Path nodeLogs;
     private String databaseUrl;
     private String username;
     private String password;
@@ -175,12 +180,26 @@ class QuartzJdbcClusterReconciliationIT {
     }
 
     private void runNodeProcessesTogether(String definition) throws Exception {
-        Process first = nodeProcess("node-a", definition);
-        Process second = nodeProcess("node-b", definition);
-        assertThat(first.waitFor(30, TimeUnit.SECONDS)).isTrue();
-        assertThat(second.waitFor(30, TimeUnit.SECONDS)).isTrue();
-        assertThat(first.exitValue()).isZero();
-        assertThat(second.exitValue()).isZero();
+        List<Process> nodes = new ArrayList<>();
+        try {
+            nodes.add(nodeProcess("node-a", definition));
+            nodes.add(nodeProcess("node-b", definition));
+            for (int index = 0; index < nodes.size(); index++) {
+                Process node = nodes.get(index);
+                String instanceId = index == 0 ? "node-a" : "node-b";
+                boolean finished = node.waitFor(30, TimeUnit.SECONDS);
+                String output = Files.readString(nodeLog(instanceId, definition));
+                assertThat(finished).as("%s (%s) timed out. Node output:%n%s",
+                        instanceId, definition, output).isTrue();
+                assertThat(node.exitValue()).as("%s (%s) failed. Node output:%n%s",
+                        instanceId, definition, output).isZero();
+            }
+        } finally {
+            for (Process node : nodes) {
+                node.destroyForcibly();
+                node.waitFor(10, TimeUnit.SECONDS);
+            }
+        }
     }
 
     private Process nodeProcess(String instanceId, String definition) throws IOException {
@@ -188,9 +207,13 @@ class QuartzJdbcClusterReconciliationIT {
         String classPath = System.getProperty("surefire.test.class.path", System.getProperty("java.class.path"));
         ProcessBuilder builder = new ProcessBuilder(java, "-cp", classPath,
                 NodeRunner.class.getName(), databaseUrl, username, password, instanceId, definition);
-        builder.redirectError(ProcessBuilder.Redirect.DISCARD);
-        builder.redirectOutput(ProcessBuilder.Redirect.DISCARD);
+        builder.redirectErrorStream(true);
+        builder.redirectOutput(nodeLog(instanceId, definition).toFile());
         return builder.start();
+    }
+
+    private Path nodeLog(String instanceId, String definition) {
+        return nodeLogs.resolve(instanceId + "-" + definition + ".log");
     }
 
     private Scheduler newClusterScheduler(String instanceId) throws Exception {

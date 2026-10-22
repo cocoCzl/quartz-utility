@@ -337,14 +337,9 @@ public class QuartzJobAnnotationProcessor implements SmartInitializingSingleton 
         Scheduler scheduler = coQuartzScheduler.getScheduler();
         JobKey jobKey = desired.jobDetail().getKey();
         TriggerKey triggerKey = desired.trigger().getKey();
-        JobDetail existingJob = scheduler.getJobDetail(jobKey);
+        JobDetail existingJob = findExistingJob(scheduler, jobKey, triggerKey);
 
         if (existingJob == null) {
-            Trigger unexpectedTrigger = scheduler.getTrigger(triggerKey);
-            if (unexpectedTrigger != null) {
-                throw new CoQuartzConfigurationException("Trigger identity " + triggerKey
-                        + " already exists without the expected task " + jobKey);
-            }
             scheduler.scheduleJob(desired.jobDetail(), desired.trigger());
             log.info("Created Co-Quartz task: {} from {}",
                     jobKey, desired.definition().getSourceDescription());
@@ -422,20 +417,32 @@ public class QuartzJobAnnotationProcessor implements SmartInitializingSingleton 
         return jobDetail.getJobBuilder().usingJobData(dataMap).build();
     }
 
+    private JobDetail findExistingJob(Scheduler scheduler, JobKey jobKey, TriggerKey triggerKey)
+            throws SchedulerException {
+        JobDetail existingJob = scheduler.getJobDetail(jobKey);
+        if (existingJob == null && scheduler.getTrigger(triggerKey) != null) {
+            // These reads use separate transactions. Another cluster node may have
+            // committed the job and trigger after our first read saw no job.
+            // Re-read before diagnosing an orphan; callers still validate ownership.
+            existingJob = scheduler.getJobDetail(jobKey);
+            if (existingJob == null) {
+                throw new CoQuartzConfigurationException("Trigger identity " + triggerKey
+                        + " already exists without the expected task " + jobKey);
+            }
+        }
+        return existingJob;
+    }
+
     private void preflightSchedule(PreparedSchedule desired) throws SchedulerException {
         Scheduler scheduler = coQuartzScheduler.getScheduler();
         JobKey jobKey = desired.jobDetail().getKey();
         TriggerKey triggerKey = desired.trigger().getKey();
-        JobDetail existingJob = scheduler.getJobDetail(jobKey);
-        Trigger existingTrigger = scheduler.getTrigger(triggerKey);
+        JobDetail existingJob = findExistingJob(scheduler, jobKey, triggerKey);
         if (existingJob == null) {
-            if (existingTrigger != null) {
-                throw new CoQuartzConfigurationException("Trigger identity " + triggerKey
-                        + " already exists without the expected task " + jobKey);
-            }
             return;
         }
         assertCodeOwned(existingJob, desired);
+        Trigger existingTrigger = scheduler.getTrigger(triggerKey);
         if (existingTrigger != null && !jobKey.equals(existingTrigger.getJobKey())) {
             throw new CoQuartzConfigurationException("Trigger identity " + triggerKey
                     + " belongs to a different task: " + existingTrigger.getJobKey());

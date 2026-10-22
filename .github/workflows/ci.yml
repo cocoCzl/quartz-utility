@@ -49,3 +49,11 @@ jobs:
           '-Dco.quartz.test.mysql.url=jdbc:mysql://127.0.0.1:3306/'
           -Dco.quartz.test.mysql.user=root -Dco.quartz.test.mysql.password=quartz-test
       - run: python3 scripts/check_test_reports.py --require-cluster
+      - name: Upload database test failure reports
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: database-integration-test-reports
+          path: |
+            **/target/surefire-reports/**
+            **/target/failsafe-reports/**

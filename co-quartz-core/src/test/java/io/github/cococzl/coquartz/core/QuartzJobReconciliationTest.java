@@ -25,6 +25,9 @@ import java.util.Properties;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.AdditionalAnswers.delegatesTo;
+import static org.mockito.Mockito.doAnswer;
+import static org.mockito.Mockito.mock;
 
 class QuartzJobReconciliationTest {
 
@@ -35,6 +38,71 @@ class QuartzJobReconciliationTest {
         if (scheduler != null) {
             scheduler.shutdown(true);
         }
+    }
+
+    @org.junit.jupiter.params.ParameterizedTest
+    @org.junit.jupiter.params.provider.ValueSource(ints = {1, 2})
+    void concurrentCreationBetweenJobAndTriggerReadsConverges(int missingRead) throws Exception {
+        scheduler = newScheduler();
+        JobKey jobKey = JobKey.jobKey("reconcileTask", "DEFAULT");
+        TriggerKey triggerKey = TriggerKey.triggerKey("TRIGGER_reconcileTask", "DEFAULT");
+        Scheduler node = mock(Scheduler.class, delegatesTo(scheduler));
+        var reads = new java.util.concurrent.atomic.AtomicInteger();
+        var originalTrigger = new java.util.concurrent.atomic.AtomicReference<Trigger>();
+        try (var context = context("versionedTaskBean", InitialTaskBean.class)) {
+            doAnswer(invocation -> {
+                if (reads.incrementAndGet() == missingRead) {
+                    // Another node commits after this node's job lookup saw no row.
+                    // Read 1 is preflight; read 2 is reconciliation after preflight.
+                    processor(context).registerJobs();
+                    originalTrigger.set(scheduler.getTrigger(triggerKey));
+                    return null;
+                }
+                return scheduler.getJobDetail(jobKey);
+            }).when(node).getJobDetail(jobKey);
+
+            new QuartzJobAnnotationProcessor(new CoQuartzScheduler(node), context,
+                    new CoQuartzProperties(), new MethodTaskRegistry(context)).registerJobs();
+        }
+
+        assertThat(scheduler.getJobKeys(org.quartz.impl.matchers.GroupMatcher.anyJobGroup()))
+                .containsExactly(jobKey);
+        assertThat(scheduler.getTriggersOfJob(jobKey)).hasSize(1);
+        assertThat(scheduler.getTrigger(triggerKey).getStartTime())
+                .isEqualTo(originalTrigger.get().getStartTime());
+        assertThat(scheduler.getTrigger(triggerKey).getNextFireTime())
+                .isEqualTo(originalTrigger.get().getNextFireTime());
+    }
+
+    @org.junit.jupiter.params.ParameterizedTest
+    @org.junit.jupiter.params.provider.ValueSource(ints = {1, 2})
+    void concurrentExternalCreationBetweenReadsIsNeverOverwritten(int missingRead) throws Exception {
+        scheduler = newScheduler();
+        JobKey jobKey = JobKey.jobKey("reconcileTask", "DEFAULT");
+        TriggerKey triggerKey = TriggerKey.triggerKey("TRIGGER_reconcileTask", "DEFAULT");
+        Scheduler node = mock(Scheduler.class, delegatesTo(scheduler));
+        var reads = new java.util.concurrent.atomic.AtomicInteger();
+        doAnswer(invocation -> {
+            if (reads.incrementAndGet() == missingRead) {
+                scheduler.scheduleJob(JobBuilder.newJob(ExternalJob.class).withIdentity(jobKey).build(),
+                        TriggerBuilder.newTrigger().withIdentity(triggerKey)
+                                .withSchedule(CronScheduleBuilder.cronSchedule("0 0 8 * * ?")).build());
+                return null;
+            }
+            return scheduler.getJobDetail(jobKey);
+        }).when(node).getJobDetail(jobKey);
+
+        try (var context = context("versionedTaskBean", InitialTaskBean.class)) {
+            var processor = new QuartzJobAnnotationProcessor(new CoQuartzScheduler(node), context,
+                    new CoQuartzProperties(), new MethodTaskRegistry(context));
+            assertThatThrownBy(processor::registerJobs)
+                    .isInstanceOf(CoQuartzConfigurationException.class)
+                    .hasMessageContaining("refusing to overwrite");
+        }
+
+        assertThat(scheduler.getJobDetail(jobKey).getJobClass()).isEqualTo(ExternalJob.class);
+        assertThat(((CronTrigger) scheduler.getTrigger(triggerKey)).getCronExpression())
+                .isEqualTo("0 0 8 * * ?");
     }
 
     @Test
